@@ -1,0 +1,25 @@
+{
+  "name": "example-proj",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rm -rf dist && mkdir dist && cp package.json README.md dist && npx tsc",
+    "localUpdateDogsvr": "cd node_modules/@dogsvr && rm dogsvr && ln -s ../../../dogsvr/dist dogsvr && rm cl-tsrpc && ln -s ../../../cl-tsrpc/dist cl-tsrpc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dogsvr/example-proj.git"
+  },
+  "author": "rowanzhu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dogsvr/example-proj/issues"
+  },
+  "homepage": "https://github.com/dogsvr/example-proj#readme",
+  "dependencies": {
+    "@dogsvr/dogsvr": "latest",
+    "@dogsvr/cl-tsrpc": "latest"
+  }
+}
