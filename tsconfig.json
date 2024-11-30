@@ -6,7 +6,9 @@
         // "lib": ["ES5","ES2015.Core"],
         // "declaration": true,
         // "declarationMap": true,
-        "strict": true
+        "strict": true,
+        "experimentalDecorators": true,
+        "esModuleInterop": true
     },
     "include": [
         "src"

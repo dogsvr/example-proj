@@ -19,7 +19,13 @@
   },
   "homepage": "https://github.com/dogsvr/example-proj#readme",
   "dependencies": {
+    "@dogsvr/cl-tsrpc": "latest",
     "@dogsvr/dogsvr": "latest",
-    "@dogsvr/cl-tsrpc": "latest"
+    "@redis/client": "^1.6.0",
+    "colyseus": "^0.15.17",
+    "mongodb": "^6.11.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }

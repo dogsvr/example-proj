@@ -1,2 +1,7 @@
-export const ZONE_LOGIN = 10001;
-export const ZONE_QUERY_PROP_PACKAGE = 10005;
+export const DIR_QUERY_ZONE_LIST = 10001;
+
+export const ZONE_LOGIN = 20001;
+export const ZONE_START_BATTLE = 20002;
+export const ZONE_BATTLE_END_NTF = 20003;
+
+export const BATTLE_START_BATTLE = 30001;
