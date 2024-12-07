@@ -1,9 +1,9 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmd from './cmd';
-import { DistributedLock } from "./redis_proxy";
-import { getMongoClient } from "./mongo_proxy";
+import * as cmdId from '../shared/cmd_id';
+import { DistributedLock } from "../shared/redis_proxy";
+import { getMongoClient } from "../shared/mongo_proxy";
 
-dogsvr.regCmdHandler(cmd.DIR_QUERY_ZONE_LIST, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
+dogsvr.regCmdHandler(cmdId.DIR_QUERY_ZONE_LIST, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req = JSON.parse(innerReq as string);
     dogsvr.debugLog(req);
 
@@ -15,7 +15,7 @@ dogsvr.regCmdHandler(cmd.DIR_QUERY_ZONE_LIST, async (reqMsg: dogsvr.Msg, innerRe
     dogsvr.respondCmd(reqMsg, JSON.stringify(res));
 })
 
-dogsvr.regCmdHandler(cmd.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
+dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req = JSON.parse(innerReq as string);
     dogsvr.debugLog(req);
 
@@ -53,15 +53,17 @@ dogsvr.regCmdHandler(cmd.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr
     dogsvr.debugLog("unlockRes:", lockRes);
 })
 
-dogsvr.regCmdHandler(cmd.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
+dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req = JSON.parse(innerReq as string);
     dogsvr.debugLog(req);
 
-    const res = {res: ""};
+    let battleRes = await dogsvr.callCmdByClc("battlesvr", cmdId.BATTLE_START_BATTLE, JSON.stringify({req: "zonesvr req"}));
+
+    const res = {res: JSON.parse(battleRes as string)};
     dogsvr.respondCmd(reqMsg, JSON.stringify(res));
 })
 
-dogsvr.regCmdHandler(cmd.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
+dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req = JSON.parse(innerReq as string);
     dogsvr.debugLog(req);
 

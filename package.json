@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf dist && mkdir dist && cp package.json README.md dist && npx tsc",
-    "localUpdateDogsvr": "cd node_modules/@dogsvr && rm dogsvr && ln -s ../../../dogsvr/dist dogsvr && rm cl-tsrpc && ln -s ../../../cl-tsrpc/dist cl-tsrpc"
+    "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc"
   },
   "repository": {
     "type": "git",
@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/dogsvr/example-proj#readme",
   "dependencies": {
+    "@dogsvr/cl-grpc": "latest",
     "@dogsvr/cl-tsrpc": "latest",
     "@dogsvr/dogsvr": "latest",
     "@redis/client": "^1.6.0",
