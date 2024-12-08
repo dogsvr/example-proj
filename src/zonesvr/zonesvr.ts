@@ -4,7 +4,7 @@ import { GrpcCL, GrpcCLC } from '@dogsvr/cl-grpc';
 
 dogsvr.setLogLevel(dogsvr.LOG_LEVEL_TRACE);
 
-const connLayer: TsrpcCL = new TsrpcCL(2000);
+const connLayer: TsrpcCL = new TsrpcCL("ws", 2000);
 connLayer.setAuthFunc(async (msg: dogsvr.Msg) => {
     return true;
 });

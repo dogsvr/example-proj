@@ -57,10 +57,20 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerRe
     const req = JSON.parse(innerReq as string);
     dogsvr.debugLog(req);
 
-    let battleRes = await dogsvr.callCmdByClc("battlesvr", cmdId.BATTLE_START_BATTLE, JSON.stringify({req: "zonesvr req"}));
+    let battleRes = await dogsvr.callCmdByClc("battlesvr", {
+        cmdId: cmdId.BATTLE_START_BATTLE,
+        openId: reqMsg.head.openId,
+        zoneId: reqMsg.head.zoneId
+    }, JSON.stringify({ req: "zonesvr req" }));
 
     const res = {res: JSON.parse(battleRes as string)};
     dogsvr.respondCmd(reqMsg, JSON.stringify(res));
+
+    dogsvr.pushMsgByCl("tsrpc", [reqMsg.head.openId + "|" + reqMsg.head.zoneId], {
+        cmdId: cmdId.ZONE_BATTLE_END_NTF,
+        openId: reqMsg.head.openId,
+        zoneId: reqMsg.head.zoneId
+    }, JSON.stringify({ ntf: "test ntf" }));
 })
 
 dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
