@@ -1,4 +1,5 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
+// @ts-expect-error
 import express from "express";
 import { createServer } from "http";
 import { Server } from "colyseus";

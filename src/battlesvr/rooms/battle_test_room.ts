@@ -1,6 +1,7 @@
 import { Room, Client } from "colyseus";
 import { BattleTestState, Player } from "./battle_test_state";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
+import * as cmdId from '../../shared/cmd_id';
 
 export class BattleTestRoom extends Room<BattleTestState> {
 
@@ -14,30 +15,32 @@ export class BattleTestRoom extends Room<BattleTestState> {
     // handle player input
     this.onMessage(0, (client, input) => {
       const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        return;
+      }
       const velocity = 2;
-
       if (input.left) {
         player.x -= velocity;
 
       } else if (input.right) {
         player.x += velocity;
       }
-
       if (input.up) {
         player.y -= velocity;
 
       } else if (input.down) {
         player.y += velocity;
       }
-
     });
   }
 
   onJoin(client: Client, options: any) {
-    dogsvr.infoLog(client.sessionId, "joined!");
+    dogsvr.infoLog(client.sessionId, options.openId, options.zoneId, "joined!");
 
     // create player at random position.
     const player = new Player();
+    player.openId = options.openId;
+    player.zoneId = options.zoneId;
     player.x = Math.random() * this.state.mapWidth;
     player.y = Math.random() * this.state.mapHeight;
 
@@ -46,6 +49,19 @@ export class BattleTestRoom extends Room<BattleTestState> {
 
   onLeave(client: Client, consented: boolean) {
     dogsvr.infoLog(client.sessionId, "left!");
+    const player = this.state.players.get(client.sessionId);
+    if (!player) {
+      return;
+    }
+
+    const scoreChange = Math.ceil(Math.random() * 10);
+
+    dogsvr.callCmdByClc("zonesvr", {
+      cmdId: cmdId.ZONE_BATTLE_END_NTF,
+      openId: player.openId,
+      zoneId: player.zoneId
+    }, JSON.stringify({ scoreChange: scoreChange }), true);
+
     this.state.players.delete(client.sessionId);
   }
 
