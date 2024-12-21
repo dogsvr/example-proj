@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "rm -rf dist && mkdir dist && cp package.json README.md dist && npx tsc",
+    "build": "npx tsc",
+    "start": "pm2 start dist/dir/dir.js && pm2 start dist/zonesvr/zonesvr.js && pm2 start dist/battlesvr/battlesvr.js",
     "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc"
   },
   "repository": {
@@ -19,9 +20,9 @@
   },
   "homepage": "https://github.com/dogsvr/example-proj#readme",
   "dependencies": {
-    "@dogsvr/cl-grpc": "^0.0.2",
-    "@dogsvr/cl-tsrpc": "^0.0.2",
-    "@dogsvr/dogsvr": "^0.0.2",
+    "@dogsvr/cl-grpc": "^0.0.4",
+    "@dogsvr/cl-tsrpc": "^0.0.4",
+    "@dogsvr/dogsvr": "^0.0.4",
     "@redis/client": "^1.6.0",
     "colyseus": "^0.15.17",
     "mongodb": "^6.11.0"

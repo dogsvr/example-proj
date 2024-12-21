@@ -4,18 +4,6 @@ import * as cmdProto from '../shared/cmd_proto';
 import { DistributedLock } from "../shared/redis_proxy";
 import { getMongoClient } from "../shared/mongo_proxy";
 
-dogsvr.regCmdHandler(cmdId.DIR_QUERY_ZONE_LIST, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
-    const req: cmdProto.DirQueryZoneListReq = JSON.parse(innerReq as string);
-    dogsvr.debugLog("DIR_QUERY_ZONE_LIST req:", req);
-
-    const db = getMongoClient().db("dogsvr-example-proj");
-    const collection = db.collection('zone_coll');
-    const findResult = await collection.find({}, { projection: { _id: 0 } }).toArray();
-
-    const res = { zoneList: findResult };
-    dogsvr.respondCmd(reqMsg, JSON.stringify(res));
-})
-
 dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(innerReq as string);
     dogsvr.debugLog("ZONE_LOGIN req:", req);
