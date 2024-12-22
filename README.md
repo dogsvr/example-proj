@@ -29,7 +29,7 @@ npm run build
 npm run start
 ```
 
-If lucky enough, typing "pm2 ls" command can see 3 processes running.
+If lucky enough, typing "pm2 ls" command can see 3 processes running.  
 If problems, typing "pm2 logs" to check server logs.
 
 # How to run client
@@ -41,3 +41,7 @@ npm run start
 ```
 
 Then follow the prompts to open browser and login this web game.
+
+# Command flow
+![image](https://github.com/user-attachments/assets/f78046b6-5f3a-41ee-aa99-3b92dd4e5dc8)
+
