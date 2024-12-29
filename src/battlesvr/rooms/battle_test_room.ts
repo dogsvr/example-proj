@@ -9,8 +9,8 @@ export class BattleTestRoom extends Room<BattleTestState> {
     this.setState(new BattleTestState());
 
     // set map dimensions
-    this.state.mapWidth = 800;
-    this.state.mapHeight = 600;
+    this.state.mapWidth = 375;
+    this.state.mapHeight = 812;
 
     // handle player input
     this.onMessage(0, (client, input) => {
@@ -18,7 +18,7 @@ export class BattleTestRoom extends Room<BattleTestState> {
       if (!player) {
         return;
       }
-      const velocity = 2;
+      const velocity = 1;
       if (input.left) {
         player.x -= velocity;
 
