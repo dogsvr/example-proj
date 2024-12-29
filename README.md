@@ -43,5 +43,9 @@ npm run start
 Then follow the prompts to open browser and login this web game.
 
 # Command flow
-![image](https://github.com/user-attachments/assets/f78046b6-5f3a-41ee-aa99-3b92dd4e5dc8)
+![image](https://github.com/user-attachments/assets/531b3190-fc41-4dd1-823c-0287b3a45144)
+
+
+# One architecture for production environment
+![image](https://github.com/user-attachments/assets/db55a062-f9af-4c24-b041-a16851142bd2)
 
