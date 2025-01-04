@@ -3,7 +3,7 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import express from "express";
 import { createServer } from "http";
 import { Server } from "colyseus";
-import { BattleTestRoom } from "./rooms/battle_test_room";
+import { StateSyncBattleRoom } from "./rooms/state_sync_battle_room";
 import "./cmd_handler";
 
 dogsvr.setLogLevel(dogsvr.LOG_LEVEL_TRACE);
@@ -17,7 +17,7 @@ function startColyseus(port: number) {
         // driver: new RedisDriver(),
         // presence: new RedisPresence(),
     });
-    gameServer.define('battle_test_room', BattleTestRoom);
+    gameServer.define('state_sync_battle_room', StateSyncBattleRoom);
     gameServer.listen(port);
     // gm tool by express
     app.get("/", (req: any, res: any) => {

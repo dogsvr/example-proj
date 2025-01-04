@@ -25,6 +25,7 @@
     "@dogsvr/dogsvr": "^0.0.4",
     "@redis/client": "^1.6.0",
     "colyseus": "^0.15.17",
+    "matter-js": "^0.20.0",
     "mongodb": "^6.11.0"
   },
   "devDependencies": {
