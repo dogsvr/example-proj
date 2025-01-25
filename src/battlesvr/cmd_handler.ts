@@ -6,6 +6,9 @@ dogsvr.regCmdHandler(cmdId.BATTLE_START_BATTLE, async (reqMsg: dogsvr.Msg, inner
     const req: cmdProto.BattleStartBattleReq = JSON.parse(innerReq as string);
     dogsvr.debugLog("BATTLE_START_BATTLE req:", req);
 
-    const res: cmdProto.BattleStartBattleRes = { roomType: "state_sync_battle_room", battleSvrAddr: "2567" };
+    const res: cmdProto.BattleStartBattleRes = {
+        roomType: req.syncType == "lockstep" ? "lockstep_sync_battle_room" : "state_sync_battle_room",
+        battleSvrAddr: "2567"
+    };
     dogsvr.respondCmd(reqMsg, JSON.stringify(res));
 })

@@ -4,6 +4,7 @@ import express from "express";
 import { createServer } from "http";
 import { Server } from "colyseus";
 import { StateSyncBattleRoom } from "./rooms/state_sync_battle_room";
+import { LockstepSyncBattleRoom } from "./rooms/lockstep_sync_battle_room";
 import "./cmd_handler";
 
 dogsvr.setLogLevel(dogsvr.LOG_LEVEL_TRACE);
@@ -18,6 +19,7 @@ function startColyseus(port: number) {
         // presence: new RedisPresence(),
     });
     gameServer.define('state_sync_battle_room', StateSyncBattleRoom);
+    gameServer.define('lockstep_sync_battle_room', LockstepSyncBattleRoom);
     gameServer.listen(port);
     // gm tool by express
     app.get("/", (req: any, res: any) => {

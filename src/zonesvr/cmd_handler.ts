@@ -49,7 +49,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerRe
         cmdId: cmdId.BATTLE_START_BATTLE,
         openId: reqMsg.head.openId,
         zoneId: reqMsg.head.zoneId
-    }, JSON.stringify({}));
+    }, JSON.stringify({syncType: req.syncType}));
 
     const res = battleRes;
     // dogsvr.respondCmd(reqMsg, JSON.stringify(res));

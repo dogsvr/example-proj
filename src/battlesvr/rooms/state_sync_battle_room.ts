@@ -28,6 +28,7 @@ class RoomState extends Schema {
 
 export class StateSyncBattleRoom extends Room<RoomState> {
   engine: Matter.Engine;
+  interval: NodeJS.Timeout | undefined;
 
   onCreate(options: any) {
     this.setState(new RoomState());
@@ -63,7 +64,7 @@ export class StateSyncBattleRoom extends Room<RoomState> {
       Matter.Body.setPosition(player.body, { x: x, y: y });
     });
 
-    setInterval(() => {
+    this.interval = setInterval(() => {
       // create ball
       for (let player of this.state.players.values()) {
         if (!player.body) {
@@ -161,6 +162,9 @@ export class StateSyncBattleRoom extends Room<RoomState> {
 
   onDispose() {
     dogsvr.infoLog("room", this.roomId, "disposing...");
+    if (this.interval) {
+      clearInterval(this.interval);
+    }
   }
 
 }

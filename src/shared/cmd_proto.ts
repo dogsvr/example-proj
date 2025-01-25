@@ -26,6 +26,7 @@ export type ZoneLoginRes = {
 };
 
 export type ZoneStartBattleReq = {
+    syncType: string;
 };
 export type ZoneStartBattleRes = {
     roomType: string;
@@ -38,6 +39,7 @@ export type ZoneBattleEndNtf = {
 };
 
 export type BattleStartBattleReq = {
+    syncType: string;
 };
 export type BattleStartBattleRes = {
     roomType: string;
