@@ -10,6 +10,15 @@ export type RoleInfo = {
     name: string;
     score: number;
 };
+export type RoleId = {
+    openId?: string;
+    zoneId?: number;
+    gid?: number; // TODO
+};
+export type RoleBriefInfo = {
+    roleId: RoleId;
+    name: string;
+};
 
 export type DirQueryZoneListReq = {
 };
@@ -36,6 +45,22 @@ export type ZoneStartBattleRes = {
 export type ZoneBattleEndNtf = {
     scoreChange: number;
     role: RoleInfo;
+};
+
+export type RankMember = {
+    roleBriefInfo?: RoleBriefInfo;
+    score: number;
+    updateTs: number;
+    rank: number; // [1, n], 0 means not in rank
+};
+export type ZoneQueryRankListReq = {
+    rankType: string; // TODO
+    offset: number; // [0, n]
+    count: number;
+};
+export type ZoneQueryRankListRes = {
+    rankList: RankMember[];
+    selfRank: RankMember;
 };
 
 export type BattleStartBattleReq = {

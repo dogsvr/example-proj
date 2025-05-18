@@ -1,8 +1,9 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../shared/cmd_id';
 import * as cmdProto from '../shared/cmd_proto';
-import { DistributedLock } from "../shared/redis_proxy";
+import { DistributedLock, RankUtil, RankTsAccuracyType, RankOrderType } from "../shared/redis_proxy";
 import { getMongoClient } from "../shared/mongo_proxy";
+import { now } from "../shared/time_util";
 
 dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(innerReq as string);
@@ -49,7 +50,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerRe
         cmdId: cmdId.BATTLE_START_BATTLE,
         openId: reqMsg.head.openId,
         zoneId: reqMsg.head.zoneId
-    }, JSON.stringify({syncType: req.syncType}));
+    }, JSON.stringify({ syncType: req.syncType }));
 
     const res = battleRes;
     // dogsvr.respondCmd(reqMsg, JSON.stringify(res));
@@ -90,4 +91,49 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, inner
 
     lockRes = await lock.unlock();
     dogsvr.debugLog("unlockRes:", lockRes);
+
+    let rankUtil = new RankUtil(
+        RankTsAccuracyType.LOW,
+        Date.parse("2050-01-01 00:00:00") / 1000,
+        1,
+        RankOrderType.DESC,
+        100,
+        0);
+    await rankUtil.updateRank(
+        "battleScoreRank|province|0",
+        { openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId },
+        role.score,
+        now()
+    );
+})
+
+dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
+    const req: cmdProto.ZoneQueryRankListReq = JSON.parse(innerReq as string);
+    dogsvr.debugLog("ZONE_QUERY_RANK_LIST req:", req);
+
+    let rankUtil = new RankUtil(
+        RankTsAccuracyType.LOW,
+        Date.parse("2050-01-01 00:00:00") / 1000,
+        1,
+        RankOrderType.DESC,
+        100,
+        0);
+    let selfRank = await rankUtil.querySelfRank("battleScoreRank|province|0",
+        { openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId });
+    const rankList = await rankUtil.queryRank("battleScoreRank|province|0", req.offset, req.count);
+    // TODO: batch query RoleBriefInfo from mongo
+
+    const res: cmdProto.ZoneQueryRankListRes = {
+        selfRank: { score: selfRank.score, updateTs: selfRank.updateTs, rank: selfRank.rank },
+        rankList: []
+    };
+    for (let i = 0; i < rankList.length; ++i) {
+        res.rankList.push({
+            roleBriefInfo: { roleId: rankList[i].roleId, name: "" },
+            score: rankList[i].score,
+            updateTs: rankList[i].updateTs,
+            rank: i + 1
+        });
+    }
+    dogsvr.respondCmd(reqMsg, JSON.stringify(res));
 })
