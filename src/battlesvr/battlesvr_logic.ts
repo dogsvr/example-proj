@@ -26,4 +26,4 @@ function startColyseus(port: number) {
         res.send("colyseus gm tool");
     });
 }
-startColyseus(2567);
+startColyseus(30040);

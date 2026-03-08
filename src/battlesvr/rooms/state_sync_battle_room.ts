@@ -46,7 +46,7 @@ export class StateSyncBattleRoom extends Room<RoomState> {
       if (!player) {
         return;
       }
-      const velocity = 2;
+      const velocity = 4;
       let x = player.body.position.x;
       let y = player.body.position.y;
       if (input.left) {
