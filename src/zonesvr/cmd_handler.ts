@@ -51,7 +51,8 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerRe
     let battleRes = await dogsvr.callCmdByClc("battlesvr", {
         cmdId: cmdId.BATTLE_START_BATTLE,
         openId: reqMsg.head.openId,
-        zoneId: reqMsg.head.zoneId
+        zoneId: reqMsg.head.zoneId,
+        gid: reqMsg.head.gid
     }, JSON.stringify({ syncType: req.syncType }));
 
     const res = battleRes;
@@ -85,7 +86,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, inner
     const updateResult = await collection.updateOne({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { $set: { score: role.score } });
     dogsvr.debugLog("update role:", updateResult);
 
-    dogsvr.pushMsgByCl("tsrpc", [reqMsg.head.openId + "|" + reqMsg.head.zoneId], {
+    dogsvr.pushMsgByCl("tsrpc", [reqMsg.head.gid ?? 0], {
         cmdId: cmdId.ZONE_BATTLE_END_NTF,
         openId: reqMsg.head.openId,
         zoneId: reqMsg.head.zoneId,
