@@ -1,7 +1,6 @@
 import { createClient } from '@redis/client';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
-import { RoleId } from './cmd_proto';
 
 const client = createClient({ url: 'redis://127.0.0.1:6379' });
 client.on('error', err => console.log('Redis Client Error', err));
@@ -84,9 +83,9 @@ export class RankUtil {
         private rankCapacity: number,
         private expireTs: number) {
     }
-    async updateRank(redisKey: string, roleId: RoleId, score: number, updateTs: number) {
+    async updateRank(redisKey: string, gid: number, score: number, updateTs: number) {
         let encodedScore = this.encodeScore(score, updateTs);
-        const memberKey = roleId.openId + "|" + roleId.zoneId; // TODO: gid
+        const memberKey = String(gid);
         // zAdd
         let res = await client.zAdd(redisKey, [{ score: encodedScore, value: memberKey }]);
         if (!res) {
@@ -100,8 +99,8 @@ export class RankUtil {
             await client.expireAt(redisKey, this.expireTs);
         }
     }
-    async querySelfRank(redisKey: string, roleId: RoleId): Promise<{ rank: number, score: number, updateTs: number }> {
-        const memberKey = roleId.openId + "|" + roleId.zoneId; // TODO: gid
+    async querySelfRank(redisKey: string, gid: number): Promise<{ rank: number, score: number, updateTs: number }> {
+        const memberKey = String(gid);
         const res = await client.zRevRank(redisKey, memberKey);
         if (res === null) {
             return { rank: 0, score: 0, updateTs: 0 };
@@ -114,7 +113,7 @@ export class RankUtil {
         const { score, updateTs } = this.decodeScore(encodedScore);
         return { rank: rank, score: score, updateTs: updateTs };
     }
-    async queryRank(redisKey: string, offset: number, count: number): Promise<Array<{ roleId: RoleId, score: number, updateTs: number }>> {
+    async queryRank(redisKey: string, offset: number, count: number): Promise<Array<{ gid: number, score: number, updateTs: number }>> {
         let stop_idx = offset + count;
         if (stop_idx > 0) {
             stop_idx -= 1;
@@ -124,12 +123,12 @@ export class RankUtil {
             dogsvr.warnLog('queryRank|zRangeWithScores failed');
             return [];
         }
-        let rankList: Array<{ roleId: RoleId, score: number, updateTs: number }> = [];
+        let rankList: Array<{ gid: number, score: number, updateTs: number }> = [];
         for (let i = 0; i < res.length; i++) {
-            let roleIdArray = res[i].value.split("|");
+            const gid = parseInt(res[i].value);
             const { score, updateTs } = this.decodeScore(res[i].score);
             rankList.push({
-                roleId: { openId: roleIdArray[0], zoneId: parseInt(roleIdArray[1]) },
+                gid: gid,
                 score: score,
                 updateTs: updateTs
             });

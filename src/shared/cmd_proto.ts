@@ -7,16 +7,14 @@ export type ZoneInfo = {
 export type RoleInfo = {
     openId: string;
     zoneId: number;
+    gid: number;
     name: string;
     score: number;
 };
-export type RoleId = {
+export type RoleBriefInfo = {
     openId?: string;
     zoneId?: number;
-    gid?: number; // TODO
-};
-export type RoleBriefInfo = {
-    roleId: RoleId;
+    gid?: number;
     name: string;
 };
 

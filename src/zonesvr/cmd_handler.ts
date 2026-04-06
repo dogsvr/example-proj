@@ -4,6 +4,7 @@ import * as cmdProto from '../shared/cmd_proto';
 import { DistributedLock, RankUtil, RankTsAccuracyType, RankOrderType } from "../shared/redis_proxy";
 import { getMongoClient } from "../shared/mongo_proxy";
 import { now } from "../shared/time_util";
+import { generateGid } from "../shared/gid_util";
 
 dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(innerReq as string);
@@ -24,7 +25,8 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogs
     let role = null;
     if (findResult.length == 0) {
         // register new role
-        role = { openId: req.openId, zoneId: req.zoneId, name: "", score: 0 };
+        const gid = await generateGid(req.openId, req.zoneId);
+        role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: "", score: 0 };
         const insertResult = await collection.insertOne(role);
         dogsvr.debugLog("register new role:", insertResult);
     }
@@ -86,7 +88,8 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, inner
     dogsvr.pushMsgByCl("tsrpc", [reqMsg.head.openId + "|" + reqMsg.head.zoneId], {
         cmdId: cmdId.ZONE_BATTLE_END_NTF,
         openId: reqMsg.head.openId,
-        zoneId: reqMsg.head.zoneId
+        zoneId: reqMsg.head.zoneId,
+        gid: reqMsg.head.gid
     }, JSON.stringify({ scoreChange: req.scoreChange, role: role }));
 
     lockRes = await lock.unlock();
@@ -101,7 +104,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, inner
         0);
     await rankUtil.updateRank(
         "battleScoreRank|province|0",
-        { openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId },
+        reqMsg.head.gid ?? 0,
         role.score,
         now()
     );
@@ -119,7 +122,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, inne
         100,
         0);
     let selfRank = await rankUtil.querySelfRank("battleScoreRank|province|0",
-        { openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId });
+        reqMsg.head.gid ?? 0);
     const rankList = await rankUtil.queryRank("battleScoreRank|province|0", req.offset, req.count);
     // TODO: batch query RoleBriefInfo from mongo
 
@@ -129,7 +132,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, inne
     };
     for (let i = 0; i < rankList.length; ++i) {
         res.rankList.push({
-            roleBriefInfo: { roleId: rankList[i].roleId, name: "" },
+            roleBriefInfo: { gid: rankList[i].gid, name: "" },
             score: rankList[i].score,
             updateTs: rankList[i].updateTs,
             rank: i + 1
