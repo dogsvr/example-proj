@@ -2,7 +2,7 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../shared/cmd_id';
 import * as cmdProto from '../shared/cmd_proto';
 import { DistributedLock, RankUtil, RankTsAccuracyType, RankOrderType } from "../shared/redis_proxy";
-import { getMongoClient } from "../shared/mongo_proxy";
+import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
 import { now } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
 
@@ -125,7 +125,8 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, inne
     let selfRank = await rankUtil.querySelfRank("battleScoreRank|province|0",
         reqMsg.head.gid ?? 0);
     const rankList = await rankUtil.queryRank("battleScoreRank|province|0", req.offset, req.count);
-    // TODO: batch query RoleBriefInfo from mongo
+    const gidList = rankList.map(r => r.gid);
+    const roleBriefMap = await batchQueryRoleBriefInfo(gidList);
 
     const res: cmdProto.ZoneQueryRankListRes = {
         selfRank: { score: selfRank.score, updateTs: selfRank.updateTs, rank: selfRank.rank },
@@ -133,7 +134,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, inne
     };
     for (let i = 0; i < rankList.length; ++i) {
         res.rankList.push({
-            roleBriefInfo: { gid: rankList[i].gid, name: "" },
+            roleBriefInfo: roleBriefMap.get(rankList[i].gid) ?? { gid: rankList[i].gid, name: "" },
             score: rankList[i].score,
             updateTs: rankList[i].updateTs,
             rank: i + 1

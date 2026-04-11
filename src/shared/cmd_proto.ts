@@ -52,7 +52,7 @@ export type RankMember = {
     rank: number; // [1, n], 0 means not in rank
 };
 export type ZoneQueryRankListReq = {
-    rankType: string; // TODO
+    rankType: string; // TODO: rankType 的值应尽量简练, 通过配置来确定具体排行榜的 key 以及其它参数
     offset: number; // [0, n]
     count: number;
 };

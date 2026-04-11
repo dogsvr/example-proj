@@ -26,4 +26,7 @@ function startColyseus(port: number) {
         res.send("colyseus gm tool");
     });
 }
-startColyseus(30040);
+
+dogsvr.workerReady(async () => {
+    startColyseus(30040);
+});
