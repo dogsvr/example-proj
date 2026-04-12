@@ -50,7 +50,7 @@ async function defaultGenerateGid(openId: string, zoneId: number): Promise<numbe
     );
     if (!result || !result.seq) {
         dogsvr.errorLog('generateGid failed|zoneId=%d|openId=%s', zoneId, openId);
-        throw new Error('generateGid failed');
+        return -1;
     }
     const gid = zoneId * GID_ZONE_MULTIPLIER + (result.seq as number);
     return gid;

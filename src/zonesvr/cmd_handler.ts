@@ -26,6 +26,11 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogs
     if (findResult.length == 0) {
         // register new role
         const gid = await generateGid(req.openId, req.zoneId);
+        if (gid < 0) {
+            dogsvr.respondError(reqMsg, 1001, 'generateGid failed');
+            await lock.unlock();
+            return;
+        }
         role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: "", score: 0 };
         const insertResult = await collection.insertOne(role);
         dogsvr.debugLog("register new role:", insertResult);
@@ -55,6 +60,10 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerRe
         gid: reqMsg.head.gid
     }, JSON.stringify({ syncType: req.syncType }));
 
+    if (battleRes == null) {
+        dogsvr.respondError(reqMsg, 1002, 'call battlesvr timeout');
+        return;
+    }
     const res = battleRes;
     // dogsvr.respondCmd(reqMsg, JSON.stringify(res));
     dogsvr.respondCmd(reqMsg, res as string);
