@@ -2,10 +2,11 @@ import { createClient } from '@redis/client';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
 
-const client = createClient({ url: 'redis://127.0.0.1:6379' });
-client.on('error', err => console.log('Redis Client Error', err));
+let client: ReturnType<typeof createClient>;
 
-export async function initRedis() {
+export async function initRedis(url: string) {
+    client = createClient({ url: url });
+    client.on('error', err => console.log('Redis Client Error', err));
     await client.connect();
     dogsvr.infoLog('redis connected');
 }

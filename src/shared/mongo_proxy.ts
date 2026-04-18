@@ -2,9 +2,10 @@ import { MongoClient } from 'mongodb'
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import { RoleBriefInfo } from './cmd_proto';
 
-const client = new MongoClient('mongodb://127.0.0.1:27017');
+let client: MongoClient;
 
-export async function initMongo() {
+export async function initMongo(uri: string) {
+    client = new MongoClient(uri);
     await client.connect();
     dogsvr.infoLog('mongo connected');
 }

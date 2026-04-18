@@ -3,11 +3,16 @@ import "./cmd_handler";
 import { initRedis } from "../shared/redis_proxy";
 import { initMongo, ensureRoleCollIndexes } from "../shared/mongo_proxy";
 
-dogsvr.setLogLevel(dogsvr.LOG_LEVEL_TRACE);
+interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {
+    mongoUri: string;
+    redisUri: string;
+}
 
 dogsvr.workerReady(async () => {
+    dogsvr.loadWorkerThreadConfig();
+    const cfg = dogsvr.getThreadConfig<ZoneSvrConfig>();
     await Promise.all([
-        initRedis(),
-        initMongo().then(() => ensureRoleCollIndexes())
+        initRedis(cfg.redisUri),
+        initMongo(cfg.mongoUri).then(() => ensureRoleCollIndexes())
     ]);
 });

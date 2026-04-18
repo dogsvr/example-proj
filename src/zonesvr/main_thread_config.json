@@ -1,0 +1,13 @@
+{
+    "workerThreadRunFile": "./zonesvr_logic.js",
+    "workerThreadNum": 2,
+    "workerConfigPath": "./worker_thread_config.json",
+    "logLevel": "trace",
+    "cl": {
+        "tsrpc": { "type": "tsrpc", "svrType": "ws", "port": 20000 },
+        "grpc": { "type": "grpc", "port": 20001 }
+    },
+    "clc": {
+        "battlesvr": { "type": "grpc", "address": "127.0.0.1:30001" }
+    }
+}

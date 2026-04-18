@@ -2,8 +2,12 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import "./cmd_handler";
 import { initMongo } from "../shared/mongo_proxy";
 
-dogsvr.setLogLevel(dogsvr.LOG_LEVEL_TRACE);
+interface DirConfig extends dogsvr.WorkerThreadBaseConfig {
+    mongoUri: string;
+}
 
 dogsvr.workerReady(async () => {
-    await initMongo();
+    dogsvr.loadWorkerThreadConfig();
+    const cfg = dogsvr.getThreadConfig<DirConfig>();
+    await initMongo(cfg.mongoUri);
 });

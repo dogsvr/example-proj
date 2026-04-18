@@ -7,7 +7,9 @@ import { StateSyncBattleRoom } from "./rooms/state_sync_battle_room";
 import { LockstepSyncBattleRoom } from "./rooms/lockstep_sync_battle_room";
 import "./cmd_handler";
 
-dogsvr.setLogLevel(dogsvr.LOG_LEVEL_TRACE);
+interface BattleSvrConfig extends dogsvr.WorkerThreadBaseConfig {
+    colyseusPort: number;
+}
 
 function startColyseus(port: number) {
     const app = express();
@@ -28,5 +30,7 @@ function startColyseus(port: number) {
 }
 
 dogsvr.workerReady(async () => {
-    startColyseus(30040);
+    dogsvr.loadWorkerThreadConfig();
+    const cfg = dogsvr.getThreadConfig<BattleSvrConfig>();
+    startColyseus(cfg.colyseusPort);
 });
