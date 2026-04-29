@@ -6,8 +6,8 @@ import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
 import { now } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
 
-dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
-    const req: cmdProto.ZoneLoginReq = JSON.parse(innerReq as string);
+dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
+    const req: cmdProto.ZoneLoginReq = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_LOGIN req:", req);
 
     const lockKey = "rolelock|" + req.openId + "|" + req.zoneId;
@@ -16,41 +16,41 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg: dogsvr.Msg, innerReq: dogs
     let lockRes = await lock.lock();
     if (!lockRes) {
         dogsvr.warnLog("lock failed");
-        return;
+        return;   // silent drop
     }
 
-    const db = getMongoClient().db("dogsvr-example-proj");
-    const collection = db.collection('role_coll');
-    const findResult = await collection.find({ openId: req.openId, zoneId: req.zoneId }, { projection: { _id: 0 } }).toArray();
-    let role = null;
-    if (findResult.length == 0) {
-        // register new role
-        const gid = await generateGid(req.openId, req.zoneId);
-        if (gid < 0) {
-            dogsvr.respondError(reqMsg, 1001, 'generateGid failed');
-            await lock.unlock();
-            return;
+    try {
+        const db = getMongoClient().db("dogsvr-example-proj");
+        const collection = db.collection('role_coll');
+        const findResult = await collection.find({ openId: req.openId, zoneId: req.zoneId }, { projection: { _id: 0 } }).toArray();
+        let role = null;
+        if (findResult.length == 0) {
+            // register new role
+            const gid = await generateGid(req.openId, req.zoneId);
+            if (gid < 0) {
+                throw new dogsvr.HandlerError(1001, 'generateGid failed');
+            }
+            role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: "", score: 0 };
+            const insertResult = await collection.insertOne(role);
+            dogsvr.debugLog("register new role:", insertResult);
         }
-        role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: "", score: 0 };
-        const insertResult = await collection.insertOne(role);
-        dogsvr.debugLog("register new role:", insertResult);
-    }
-    else {
-        role = findResult[0];
-        // role.score += 1;
-        // const updateResult = await collection.updateOne({openId: req.openId, zoneId: req.zoneId}, {$set: {score: role.score}});
-        // dogsvr.debugLog("update role:", updateResult);
-    }
+        else {
+            role = findResult[0];
+            // role.score += 1;
+            // const updateResult = await collection.updateOne({openId: req.openId, zoneId: req.zoneId}, {$set: {score: role.score}});
+            // dogsvr.debugLog("update role:", updateResult);
+        }
 
-    const res = { role: role };
-    dogsvr.respondCmd(reqMsg, JSON.stringify(res));
-
-    lockRes = await lock.unlock();
-    dogsvr.debugLog("unlockRes:", lockRes);
+        const res = { role: role };
+        return JSON.stringify(res);
+    } finally {
+        lockRes = await lock.unlock();
+        dogsvr.debugLog("unlockRes:", lockRes);
+    }
 })
 
-dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
-    const req: cmdProto.ZoneStartBattleReq = JSON.parse(innerReq as string);
+dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg) => {
+    const req: cmdProto.ZoneStartBattleReq = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_START_BATTLE req:", req);
 
     let battleRes = await dogsvr.callCmdByClc("battlesvr", {
@@ -61,16 +61,13 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg: dogsvr.Msg, innerRe
     }, JSON.stringify({ syncType: req.syncType }));
 
     if (battleRes == null) {
-        dogsvr.respondError(reqMsg, 1002, 'call battlesvr timeout');
-        return;
+        throw new dogsvr.HandlerError(1002, 'call battlesvr timeout');
     }
-    const res = battleRes;
-    // dogsvr.respondCmd(reqMsg, JSON.stringify(res));
-    dogsvr.respondCmd(reqMsg, res as string);
+    return battleRes as string;
 })
 
-dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
-    const req: cmdProto.ZoneBattleEndNtf = JSON.parse(innerReq as string);
+dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
+    const req: cmdProto.ZoneBattleEndNtf = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_BATTLE_END_NTF:", req);
 
     const lockKey = "rolelock|" + reqMsg.head.openId + "|" + reqMsg.head.zoneId;
@@ -118,10 +115,11 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg: dogsvr.Msg, inner
         role.score,
         now()
     );
+    // _NTF: no response expected, implicit return undefined
 })
 
-dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, innerReq: dogsvr.MsgBodyType) => {
-    const req: cmdProto.ZoneQueryRankListReq = JSON.parse(innerReq as string);
+dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
+    const req: cmdProto.ZoneQueryRankListReq = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_QUERY_RANK_LIST req:", req);
 
     let rankUtil = new RankUtil(
@@ -149,5 +147,5 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg: dogsvr.Msg, inne
             rank: i + 1
         });
     }
-    dogsvr.respondCmd(reqMsg, JSON.stringify(res));
+    return JSON.stringify(res);
 })
