@@ -10,6 +10,8 @@ export type RoleInfo = {
     gid: number;
     name: string;
     score: number;
+    cityId?: number;
+    provinceId?: number;
 };
 export type RoleBriefInfo = {
     openId?: string;
@@ -52,7 +54,7 @@ export type RankMember = {
     rank: number; // [1, n], 0 means not in rank
 };
 export type ZoneQueryRankListReq = {
-    rankType: string; // TODO: rankType 的值应尽量简练, 通过配置来确定具体排行榜的 key 以及其它参数
+    rankId: number; // TbRank primary key, corresponds to the `id` column in example-proj-cfg/designer_cfg/Datas/rank.xlsx
     offset: number; // [0, n]
     count: number;
 };

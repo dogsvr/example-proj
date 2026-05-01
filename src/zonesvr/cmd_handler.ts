@@ -1,7 +1,9 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../shared/cmd_id';
 import * as cmdProto from '../shared/cmd_proto';
-import { DistributedLock, RankUtil, RankTsAccuracyType, RankOrderType } from "../shared/redis_proxy";
+import { DistributedLock, RankUtil } from "../shared/redis_proxy";
+import { getCfgRow, forEachCfgRow } from '@dogsvr/cfg-luban';
+import type { RankT } from '../../../example-proj-cfg/dist/ts/cfg';
 import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
 import { now } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
@@ -102,19 +104,16 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     lockRes = await lock.unlock();
     dogsvr.debugLog("unlockRes:", lockRes);
 
-    let rankUtil = new RankUtil(
-        RankTsAccuracyType.LOW,
-        Date.parse("2050-01-01 00:00:00") / 1000,
-        1,
-        RankOrderType.DESC,
-        100,
-        0);
-    await rankUtil.updateRank(
-        "battleScoreRank|province|0",
-        reqMsg.head.gid ?? 0,
-        role.score,
-        now()
-    );
+    // Update every configured rank board on battle end.
+    // Extending rank.xlsx with a new row requires no handler code change.
+    const updatePromises: Promise<void>[] = [];
+    const updateTs = now();
+    const gid = reqMsg.head.gid ?? 0;
+    forEachCfgRow<RankT>('TbRank', (row) => {
+        const { util, redisKey } = RankUtil.fromCfg(row, role as unknown as cmdProto.RoleInfo);
+        updatePromises.push(util.updateRank(redisKey, gid, role.score, updateTs));
+    });
+    await Promise.all(updatePromises);
     // _NTF: no response expected, implicit return undefined
 })
 
@@ -122,16 +121,21 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
     const req: cmdProto.ZoneQueryRankListReq = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_QUERY_RANK_LIST req:", req);
 
-    let rankUtil = new RankUtil(
-        RankTsAccuracyType.LOW,
-        Date.parse("2050-01-01 00:00:00") / 1000,
-        1,
-        RankOrderType.DESC,
-        100,
-        0);
-    let selfRank = await rankUtil.querySelfRank("battleScoreRank|province|0",
-        reqMsg.head.gid ?? 0);
-    const rankList = await rankUtil.queryRank("battleScoreRank|province|0", req.offset, req.count);
+    const rankRow = getCfgRow<RankT>('TbRank', req.rankId);
+    if (!rankRow) {
+        throw new dogsvr.HandlerError(1003, `rank cfg not found: rankId=${req.rankId}`);
+    }
+    // Look up the requester's role to pick the right rank-dimension value (zone/city/province).
+    const db = getMongoClient().db("dogsvr-example-proj");
+    const roleColl = db.collection('role_coll');
+    const roleFound = await roleColl.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
+    if (roleFound.length == 0) {
+        throw new dogsvr.HandlerError(1004, `role not found: openId=${reqMsg.head.openId} zoneId=${reqMsg.head.zoneId}`);
+    }
+    const selfRole = roleFound[0] as unknown as cmdProto.RoleInfo;
+    const { util: rankUtil, redisKey } = RankUtil.fromCfg(rankRow, selfRole);
+    const selfRank = await rankUtil.querySelfRank(redisKey, reqMsg.head.gid ?? 0);
+    const rankList = await rankUtil.queryRank(redisKey, req.offset, req.count);
     const gidList = rankList.map(r => r.gid);
     const roleBriefMap = await batchQueryRoleBriefInfo(gidList);
 

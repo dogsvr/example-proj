@@ -1,6 +1,8 @@
 import { createClient } from '@redis/client';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
+import { RankType, type RankT } from '../../../example-proj-cfg/dist/ts/cfg';
+import type { RoleInfo } from './cmd_proto';
 
 let client: ReturnType<typeof createClient>;
 
@@ -62,8 +64,8 @@ export class DistributedLock {
 }
 
 export enum RankTsAccuracyType {
-    HIGH = 1, // 活动开始时间 + 365天 - 上榜时间
-    LOW = 2   // (排行榜结束时间 - 上榜时间) / 30
+    HIGH = 1, // activityStartTs + 365 days - submitTs
+    LOW = 2   // (rankEndTs - submitTs) / 30
 }
 export enum RankOrderType {
     DESC = 1,
@@ -83,6 +85,28 @@ export class RankUtil {
         private rankOrder: number,
         private rankCapacity: number,
         private expireTs: number) {
+    }
+    /**
+     * Build a RankUtil + its Redis key from a TbRank config row.
+     * Key is composed by `keyBuilder` (defaults to {@link defaultRankKeyBuilder}), which
+     * reads role dimension fields based on `row.type` (RankType). Callers that need a
+     * different scheme (e.g. seasonal buckets, custom prefix per environment) pass a
+     * custom builder.
+     */
+    static fromCfg(
+        row: RankT,
+        role: RoleInfo,
+        keyBuilder: RankKeyBuilder = defaultRankKeyBuilder,
+    ): { util: RankUtil, redisKey: string } {
+        const util = new RankUtil(
+            row.tsAccuracyType,
+            Number(row.baseTs),
+            row.scoreAccuracyOffset,
+            row.rankOrder,
+            row.capacity,
+            row.expireTs);
+        const redisKey = keyBuilder(row, role);
+        return { util, redisKey };
     }
     async updateRank(redisKey: string, gid: number, score: number, updateTs: number) {
         let encodedScore = this.encodeScore(score, updateTs);
@@ -177,3 +201,54 @@ export class RankUtil {
         return { score: score, updateTs: updateTs };
     }
 }
+
+/**
+ * Build a Redis key string for a given rank config row and the role whose rank
+ * dimension we care about. Passed to {@link RankUtil.fromCfg} when the default
+ * scheme does not fit.
+ */
+export type RankKeyBuilder = (row: RankT, role: RoleInfo) => string;
+
+/**
+ * Default key scheme: `rank|{row.id}|{type-tag}[|{dimension}]`.
+ *
+ * The `type-tag` segment labels the RankType so keys are self-describing and
+ * unambiguous under `SCAN MATCH rank|{id}|*`. The optional `{dimension}` segment
+ * is the role's corresponding scope id:
+ *   - RankType_AllZone:  -> `rank|{id}|allzone`
+ *   - RankType_Zone:     -> `rank|{id}|zone|{role.zoneId ?? 0}`
+ *   - RankType_City:     -> `rank|{id}|city|{role.cityId ?? 0}`
+ *   - RankType_Province: -> `rank|{id}|province|{role.provinceId ?? 0}`
+ *
+ * Conventions locked in by this builder (extend with care):
+ *   1. The `rank|` Redis namespace is reserved for keys produced here; do not
+ *      collide from elsewhere in the codebase.
+ *   2. Type-tag style is lowercase-compact (`allzone`, not `all_zone` / `AllZone`).
+ *      Any new RankType added to rank.xlsx must follow the same style when its
+ *      case is added here.
+ *   3. Missing role.cityId / role.provinceId falls back to 0. This assumes 0
+ *      is NOT a valid city/province id in business data; revisit if that
+ *      assumption changes.
+ *
+ * Throws on unknown RankType so that configuration drift (e.g. a new RankType
+ * added to rank.xlsx without updating this builder) surfaces loudly instead of
+ * silently bucketing everyone into a stray board.
+ */
+export const defaultRankKeyBuilder: RankKeyBuilder = (row, role) => {
+    const prefix = `rank|${row.id}`;
+    switch (row.type) {
+        case RankType.RankType_AllZone:
+            return `${prefix}|allzone`;
+        case RankType.RankType_Zone:
+            return `${prefix}|zone|${role.zoneId ?? 0}`;
+        case RankType.RankType_City:
+            return `${prefix}|city|${role.cityId ?? 0}`;
+        case RankType.RankType_Province:
+            return `${prefix}|province|${role.provinceId ?? 0}`;
+        default:
+            throw new Error(
+                `defaultRankKeyBuilder: unsupported RankType=${row.type} on rank id=${row.id}. ` +
+                `Extend defaultRankKeyBuilder or pass a custom RankKeyBuilder to RankUtil.fromCfg.`
+            );
+    }
+};

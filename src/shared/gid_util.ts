@@ -10,7 +10,7 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
  * The zoneId is directly visible from the gid value.
  */
 
-export const GID_ZONE_MULTIPLIER = 1_000_000_000; // 10 亿
+export const GID_ZONE_MULTIPLIER = 1_000_000_000; // 1 billion
 
 /** GID generator function signature — can be overridden by business code */
 export type GidGeneratorFn = (openId: string, zoneId: number) => Promise<number>;
