@@ -3,7 +3,7 @@ import * as cmdId from '../shared/cmd_id';
 import * as cmdProto from '../shared/cmd_proto';
 import { DistributedLock, RankUtil } from "../shared/redis_proxy";
 import { getCfgRow, forEachCfgRow } from '@dogsvr/cfg-luban';
-import type { RankT } from '../../../example-proj-cfg/dist/ts/cfg';
+import type { RankT } from 'example-proj-cfg';
 import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
 import { now } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
@@ -44,7 +44,11 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
         }
 
         const res = { role: role };
-        return JSON.stringify(res);
+        // Patch res head with gid so cl-tsrpc ApiCommon.ts records conn.dogGid
+        // on first request. Subsequent requests will then have head.gid
+        // auto-filled, and zonesvr->battlesvr routing / rank updates will see
+        // the real gid instead of undefined.
+        return { body: JSON.stringify(res), head: { gid: role.gid } };
     } finally {
         lockRes = await lock.unlock();
         dogsvr.debugLog("unlockRes:", lockRes);

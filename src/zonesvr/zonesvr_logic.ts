@@ -3,7 +3,7 @@ import "./cmd_handler";
 import { initRedis } from "../shared/redis_proxy";
 import { initMongo, ensureRoleCollIndexes } from "../shared/mongo_proxy";
 import { openCfgDb } from '@dogsvr/cfg-luban';
-import * as cfgModule from '../../../example-proj-cfg/dist/ts/cfg';
+import * as cfgModule from 'example-proj-cfg';
 import * as path from 'node:path';
 
 interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {

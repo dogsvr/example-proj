@@ -40,6 +40,10 @@ export type ZoneStartBattleReq = {
 export type ZoneStartBattleRes = {
     roomType: string;
     battleSvrAddr: string;
+    // one-time session ticket issued by battlesvr; client forwards it to Colyseus onAuth
+    ticket: string;
+    // ticket TTL in ms, informational only (for client-side diagnostics / logs)
+    ticketTtlMs: number;
 };
 
 export type ZoneBattleEndNtf = {
@@ -69,4 +73,8 @@ export type BattleStartBattleReq = {
 export type BattleStartBattleRes = {
     roomType: string;
     battleSvrAddr: string;
+    // one-time session ticket; consumed in Colyseus onAuth to recover {gid, openId, zoneId}
+    ticket: string;
+    // ticket TTL in ms, informational only
+    ticketTtlMs: number;
 };

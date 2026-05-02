@@ -1,13 +1,15 @@
-import { Room, Client } from "colyseus";
+import { Room, Client, ServerError } from "colyseus";
 import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
 // @ts-expect-error
 import * as Matter from "matter-js";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../shared/cmd_id';
+import { consumeTicket, TicketPayload } from '../session_ticket';
 
 class Player extends Schema {
   @type("number") x: number = 0;
   @type("number") y: number = 0;
+  @type("number") gid: number = 0;
   openId: string = "";
   zoneId: number = 0;
   body: Matter.Body | null = null;
@@ -125,13 +127,30 @@ export class StateSyncBattleRoom extends Room<RoomState> {
     }
   }
 
-  onJoin(client: Client, options: any) {
-    dogsvr.infoLog(client.sessionId, options.openId, options.zoneId, "joined!");
+  // Colyseus 0.15: onAuth's return value is passed as the 3rd argument of onJoin.
+  // We use a one-time ticket issued by BATTLE_START_BATTLE to recover the
+  // authenticated {gid, openId, zoneId}, so the client cannot spoof its identity
+  // by editing joinOptions.
+  async onAuth(client: Client, options: any): Promise<TicketPayload> {
+    const payload = consumeTicket(options?.ticket);
+    if (!payload) {
+      throw new ServerError(401, "invalid or expired battle ticket");
+    }
+    return payload;
+  }
+
+  onJoin(client: Client, options: any, auth?: TicketPayload) {
+    if (!auth) {
+      // Should be unreachable: Colyseus only calls onJoin after onAuth succeeds.
+      throw new Error("onJoin called without auth payload");
+    }
+    dogsvr.infoLog(client.sessionId, auth.gid, auth.openId, auth.zoneId, "joined!");
 
     // create player at random position.
     const player = new Player();
-    player.openId = options.openId;
-    player.zoneId = options.zoneId;
+    player.gid = auth.gid;
+    player.openId = auth.openId;
+    player.zoneId = auth.zoneId;
     player.x = Math.random() * this.state.mapWidth;
     player.y = Math.random() * this.state.mapHeight;
 
@@ -153,7 +172,8 @@ export class StateSyncBattleRoom extends Room<RoomState> {
     dogsvr.callCmdByClc("zonesvr", {
       cmdId: cmdId.ZONE_BATTLE_END_NTF,
       openId: player.openId,
-      zoneId: player.zoneId
+      zoneId: player.zoneId,
+      gid: player.gid,
     }, JSON.stringify({ scoreChange: scoreChange }), true);
 
     Matter.Composite.remove(this.engine.world, player.body);

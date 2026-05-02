@@ -8,6 +8,24 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
  * Default encoding: gid = zoneId * GID_ZONE_MULTIPLIER + autoIncrementSeq
  * e.g. zoneId=3, seq=42 => gid = 3_000_000_042
  * The zoneId is directly visible from the gid value.
+ *
+ * Upper bound
+ * -----------
+ * gid is carried as a JS `number` end-to-end: MsgHeadType.gid, MongoDB
+ * role_coll.gid (BSON double), TSRPC JSON on the wire, cl-grpc wire
+ * (uint64, but the ts-proto binding uses `forceLong=number`), Colyseus
+ * schema `@type("number")`, and the client-side Phaser registry. The
+ * global cap is therefore Number.MAX_SAFE_INTEGER = 2^53 - 1 ≈ 9.007e15.
+ *
+ * Combined with the default encoding, the hard upper bound on zoneId is:
+ *     zoneId <= floor(MAX_SAFE_INTEGER / GID_ZONE_MULTIPLIER) ≈ 9_007_199
+ * i.e. ~9 million zones, well above any realistic deployment.
+ *
+ * Exceeding this bound requires either shrinking GID_ZONE_MULTIPLIER
+ * (which reduces per-zone seq headroom) or migrating the entire stack to
+ * bigint — MsgHeadType.gid, the cl-grpc proto binding (forceLong=bigint),
+ * the JSON codec, and the Colyseus schema all have to change together.
+ * That migration is intentionally not supported out of the box.
  */
 
 export const GID_ZONE_MULTIPLIER = 1_000_000_000; // 1 billion
