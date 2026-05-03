@@ -1,10 +1,9 @@
 {
   "name": "example-proj",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "private": true,
   "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rm -rf dist && tsc && copyfiles -u 1 \"src/*/*.json\" dist",
     "start": "pm2 start ecosystem.config.js",
     "stop": "pm2 stop ecosystem.config.js",
@@ -13,32 +12,25 @@
     "delete": "pm2 delete ecosystem.config.js",
     "logs": "pm2 logs exp-dir exp-zonesvr exp-battlesvr --lines 100",
     "status": "pm2 ls",
-    "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban example-proj-cfg"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dogsvr/example-proj.git"
+    "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban"
   },
   "author": "rowanzhu",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/dogsvr/example-proj/issues"
-  },
-  "homepage": "https://github.com/dogsvr/example-proj#readme",
   "dependencies": {
-    "@dogsvr/cfg-luban": "file:../cfg-luban/cfg-luban",
-    "@dogsvr/cl-grpc": "^0.0.4",
-    "@dogsvr/cl-tsrpc": "^0.0.4",
-    "@dogsvr/dogsvr": "^0.0.4",
-    "@redis/client": "^1.6.0",
-    "colyseus": "^0.15.17",
+    "@dogsvr/cfg-luban": "^0.4.0",
+    "@dogsvr/cl-grpc": "^0.4.0",
+    "@dogsvr/cl-tsrpc": "^0.4.0",
+    "@dogsvr/dogsvr": "^0.4.0",
+    "@redis/client": "^5.12.1",
+    "colyseus": "^0.17.10",
     "example-proj-cfg": "file:../example-proj-cfg",
     "matter-js": "^0.20.0",
-    "mongodb": "^6.11.0"
+    "mongodb": "^7.2.0"
   },
   "devDependencies": {
+    "@types/node": "^24.12.2",
     "copyfiles": "^2.4.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.9.3"
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
   }
 }

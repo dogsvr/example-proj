@@ -28,7 +28,7 @@ class RoomState extends Schema {
   @type([Ball]) balls = new ArraySchema<Ball>();
 }
 
-export class StateSyncBattleRoom extends Room<RoomState> {
+export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   engine: Matter.Engine;
   interval: NodeJS.Timeout | undefined;
 
@@ -160,7 +160,9 @@ export class StateSyncBattleRoom extends Room<RoomState> {
     this.state.players.set(client.sessionId, player);
   }
 
-  onLeave(client: Client, consented: boolean) {
+  // colyseus 0.17: onLeave's 2nd arg changed from `consented: boolean` to
+  // `code?: number` (WebSocket close code). We don't branch on it.
+  onLeave(client: Client, code?: number) {
     dogsvr.infoLog(client.sessionId, "left!");
     const player = this.state.players.get(client.sessionId);
     if (!player) {

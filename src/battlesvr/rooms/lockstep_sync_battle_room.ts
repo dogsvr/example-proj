@@ -79,7 +79,9 @@ export class LockstepSyncBattleRoom extends Room {
       frameFrequency: this.frameFrequency});
   }
 
-  onLeave(client: Client, consented: boolean) {
+  // colyseus 0.17: onLeave's 2nd arg changed from `consented: boolean` to
+  // `code?: number` (WebSocket close code). We don't branch on it.
+  onLeave(client: Client, code?: number) {
     dogsvr.infoLog(client.sessionId, "left lockstep");
     const s = this.sessions.get(client.sessionId);
     this.sessions.delete(client.sessionId);

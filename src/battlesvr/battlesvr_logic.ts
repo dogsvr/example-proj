@@ -3,6 +3,7 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import express from "express";
 import { createServer } from "http";
 import { Server } from "colyseus";
+import { WebSocketTransport } from "@colyseus/ws-transport";
 import { StateSyncBattleRoom } from "./rooms/state_sync_battle_room";
 import { LockstepSyncBattleRoom } from "./rooms/lockstep_sync_battle_room";
 import "./cmd_handler";
@@ -14,9 +15,12 @@ interface BattleSvrConfig extends dogsvr.WorkerThreadBaseConfig {
 function startColyseus(port: number) {
     const app = express();
     app.use(express.json());
+    // colyseus 0.17: the HTTP `server` no longer lives on `ServerOptions`.
+    // It must be passed to the transport, which in turn attaches to it.
     const gameServer = new Server({
-        server: createServer(app),
-        // transport: new uWebSocketsTransport(),
+        transport: new WebSocketTransport({
+            server: createServer(app),
+        }),
         // driver: new RedisDriver(),
         // presence: new RedisPresence(),
     });

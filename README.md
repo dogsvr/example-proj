@@ -27,7 +27,7 @@ Each server lives under `src/<server>/` and follows the same shape: `<server>.ts
 
 ## Prerequisites
 
-- **Node.js**: tested on **v16.15.1 on Linux (x86-64)**. Newer LTS versions (18 / 20 / 22) are expected to work but are not routinely exercised; older versions may not. File an issue if something breaks on your runtime.
+- **Node.js**: tested on **v24.13.0 on Linux (x86-64)**; other maintained LTS lines are expected to work but are not routinely exercised. File an issue if something breaks on your runtime.
 - **TypeScript** + **pm2** (globally or via `npx`)
 - **Redis** and **MongoDB** — reachable from the servers. Deployment form is your call (managed service, dedicated boxes, docker, whatever); the demo just assumes they're on `localhost`.
 
