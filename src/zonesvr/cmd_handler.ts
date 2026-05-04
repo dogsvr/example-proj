@@ -118,7 +118,15 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
         updatePromises.push(util.updateRank(redisKey, gid, role.score, updateTs));
     });
     await Promise.all(updatePromises);
-    // _NTF: no response expected, implicit return undefined
+    // Return an empty body so the worker replies to main_thread. The sender
+    // uses callCmdByClc(..., noResponse=true) which is understood only inside
+    // its own worker — once the message crosses the gRPC wire and reaches the
+    // peer's main_thread, that main_thread always opens a txn in
+    // sendMsgToWorkerThread and waits for a reply (5s TxnMgr default).
+    // Returning undefined here is a silent-drop on our side but manifests as
+    // `txn timeout|txnId:N|timeoutMs:5000` on zonesvr main 5 seconds later.
+    // An empty reply is harmless: the sender discarded the response anyway.
+    return '';
 })
 
 dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {

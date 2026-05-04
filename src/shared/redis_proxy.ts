@@ -74,10 +74,14 @@ export enum RankOrderType {
 export class RankUtil {
     static readonly HIGH_ACCU_TS_OFFSET = 60 * 60 * 24 * 365;
     static readonly LOW_ACCU_TS_LOST = 30;
-    static readonly MAX_SCORE_VALUE = 0xFFFFFFF;
-    static readonly MAX_TS_VALUE = 0x1FFFFFF;
-    static readonly TS_BIT_NUM = 25; // 25 + 28 = 53
-    static readonly SCORE_VALUE_BIT_DISTR = 0x3FFFFFFE000000;
+    static readonly MAX_SCORE_VALUE = 0xFFFFFFF; // 28-bit score field
+    static readonly MAX_TS_VALUE = 0x1FFFFFF;    // 25-bit ts field
+    // Layout: [score:28bit][ts:25bit] packed into a 53-bit safe integer.
+    // We must use arithmetic (not JS bit ops) because `<<` / `>>` / `&` / `|`
+    // operate on 32-bit signed ints and would overflow / sign-extend once the
+    // score exceeds 64 (bit 6 shifted into bit 31 = sign bit) or 128 (bit 7
+    // shifted past int32). `TS_SHIFT` is the arithmetic equivalent of `<< 25`.
+    static readonly TS_SHIFT = 0x2000000; // 2 ** 25
     constructor(
         private tsAccuracyType: number,
         private baseTs: number,
@@ -109,17 +113,14 @@ export class RankUtil {
         return { util, redisKey };
     }
     async updateRank(redisKey: string, gid: number, score: number, updateTs: number) {
-        let encodedScore = this.encodeScore(score, updateTs);
+        const encodedScore = this.encodeScore(score, updateTs);
         const memberKey = String(gid);
-        // zAdd
-        let res = await client.zAdd(redisKey, [{ score: encodedScore, value: memberKey }]);
-        if (!res) {
-            dogsvr.warnLog('updateRank|zAdd failed');
-            return;
-        }
-        // zRemRangeByRank
+        // @redis/client surfaces failures by rejecting the promise; zAdd's
+        // numeric return is "elements newly added" (0 when the member already
+        // existed and we just refreshed its score — both are success paths).
+        // Let callers see any real Redis error via uncaught rejection.
+        await client.zAdd(redisKey, [{ score: encodedScore, value: memberKey }]);
         await client.zRemRangeByRank(redisKey, 0, -1 - this.rankCapacity);
-        // expireAt
         if (this.expireTs > 0) {
             await client.expireAt(redisKey, this.expireTs);
         }
@@ -143,11 +144,10 @@ export class RankUtil {
         if (stop_idx > 0) {
             stop_idx -= 1;
         }
+        // zRangeWithScores always resolves to an array (empty when the key
+        // doesn't exist); real failures reject the promise and will surface
+        // via uncaught rejection instead of a null sentinel.
         const res = await client.zRangeWithScores(redisKey, offset, stop_idx, { REV: true });
-        if (res === null) {
-            dogsvr.warnLog('queryRank|zRangeWithScores failed');
-            return [];
-        }
         let rankList: Array<{ gid: number, score: number, updateTs: number }> = [];
         for (let i = 0; i < res.length; i++) {
             const gid = parseInt(res[i].value);
@@ -169,10 +169,19 @@ export class RankUtil {
             return 0;
         }
         if (this.tsAccuracyType == RankTsAccuracyType.LOW) {
-            updateTs = (this.baseTs - updateTs) / RankUtil.LOW_ACCU_TS_LOST;
+            // Floor to integer: (baseTs - updateTs) is not guaranteed divisible
+            // by LOW_ACCU_TS_LOST (30). A fractional ts leaks into the packed
+            // double as `score * 2^25 + ts_frac`, and ULP errors in the
+            // subsequent `* 30` at decode time produce e.g. 1777882933.000002
+            // instead of 1777882933. Quantizing here is also the business
+            // intent of LOW accuracy (30s bucket).
+            updateTs = Math.floor((this.baseTs - updateTs) / RankUtil.LOW_ACCU_TS_LOST);
         }
         else {
-            updateTs = this.baseTs + RankUtil.HIGH_ACCU_TS_OFFSET - updateTs;
+            // HIGH mode currently takes integer inputs only; floor defensively
+            // so any future non-integer baseTs / HIGH_ACCU_TS_OFFSET can't
+            // leak fractional bits into the packed score.
+            updateTs = Math.floor(this.baseTs + RankUtil.HIGH_ACCU_TS_OFFSET - updateTs);
         }
         if (updateTs > RankUtil.MAX_TS_VALUE || updateTs < 0) {
             dogsvr.warnLog('encodeScore|invalid updateTs|%d', updateTs);
@@ -181,17 +190,21 @@ export class RankUtil {
         if (this.rankOrder == RankOrderType.ASC) {
             score = RankUtil.MAX_SCORE_VALUE - score;
         }
-        return ((score & RankUtil.MAX_SCORE_VALUE) << RankUtil.TS_BIT_NUM) | updateTs;
+        // Arithmetic pack: (score * 2^25) + ts. The two fields are disjoint so
+        // `+` is equivalent to `|`. Result is ≤ 2^53 - 1, safe as a JS Number
+        // and as a Redis zset score (which is stored as a double).
+        return score * RankUtil.TS_SHIFT + updateTs;
     }
     private decodeScore(encodedScore: number): { score: number, updateTs: number } {
-        let score = ((encodedScore & RankUtil.SCORE_VALUE_BIT_DISTR) >> RankUtil.TS_BIT_NUM) & RankUtil.MAX_SCORE_VALUE;
+        // Arithmetic unpack, inverse of encodeScore.
+        let updateTs = encodedScore % RankUtil.TS_SHIFT;
+        let score = Math.floor(encodedScore / RankUtil.TS_SHIFT);
         if (this.rankOrder == RankOrderType.ASC) {
             score = RankUtil.MAX_SCORE_VALUE - score;
         }
         if (this.scoreAccuracyOffset > 1) {
             score = score * this.scoreAccuracyOffset;
         }
-        let updateTs = encodedScore & RankUtil.MAX_TS_VALUE;
         if (this.tsAccuracyType == RankTsAccuracyType.LOW) {
             updateTs = this.baseTs - updateTs * RankUtil.LOW_ACCU_TS_LOST;
         }
