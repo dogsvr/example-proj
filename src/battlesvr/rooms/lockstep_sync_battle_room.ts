@@ -1,6 +1,6 @@
 import { Room, Client, ServerError } from "colyseus";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../../shared/cmd_id';
+import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 
 type Action = {

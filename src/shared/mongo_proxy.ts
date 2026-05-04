@@ -1,6 +1,6 @@
 import { MongoClient } from 'mongodb'
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import { RoleBriefInfo } from './cmd_proto';
+import { RoleBriefInfo } from '../protocols/cmd_proto';
 
 let client: MongoClient;
 

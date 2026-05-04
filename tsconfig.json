@@ -8,8 +8,8 @@
         "noEmitOnError": true,
         "skipLibCheck": true,
         // "lib": ["ES5","ES2015.Core"],
-        // "declaration": true,
-        // "declarationMap": true,
+        "declaration": true,
+        "declarationMap": true,
         "strict": true,
         "experimentalDecorators": true,
         "esModuleInterop": true

@@ -2,7 +2,7 @@ import { createClient } from '@redis/client';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
 import { RankType, type RankT } from 'example-proj-cfg';
-import type { RoleInfo } from './cmd_proto';
+import type { RoleInfo } from '../protocols/cmd_proto';
 
 let client: ReturnType<typeof createClient>;
 

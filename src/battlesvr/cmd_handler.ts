@@ -1,6 +1,6 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../shared/cmd_id';
-import * as cmdProto from '../shared/cmd_proto';
+import * as cmdId from '../protocols/cmd_id';
+import * as cmdProto from '../protocols/cmd_proto';
 import { issueTicket } from './session_ticket';
 
 dogsvr.regCmdHandler(cmdId.BATTLE_START_BATTLE, async (reqMsg) => {

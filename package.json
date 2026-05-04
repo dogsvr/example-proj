@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "",
+  "exports": {
+    "./protocols/*": {
+      "types": "./dist/protocols/*.d.ts",
+      "default": "./dist/protocols/*.js"
+    },
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "build": "rm -rf dist && tsc && copyfiles -u 1 \"src/*/*.json\" dist",
     "start": "pm2 start ecosystem.config.js",

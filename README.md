@@ -23,7 +23,36 @@ A runnable three-server reference built on [`@dogsvr/dogsvr`](https://github.com
 
 The port numbers above are just the values wired up in this demo's `main_thread_config.json` / `worker_thread_config.json`; in a real deployment plan your own port map and tweak those configs accordingly.
 
-Each server lives under `src/<server>/` and follows the same shape: `<server>.ts` (main-thread entry) + `<server>_logic.ts` (`workerReady` init) + `cmd_handler.ts` (`regCmdHandler` calls) + `main_thread_config.json` + `worker_thread_config.json`. Common utilities (cmd ids, proto types, gid/redis/mongo/time helpers) live in `src/shared/`. See [Diagrams](#diagrams) below for request flow and a production deployment.
+Each server lives under `src/<server>/` and follows the same shape: `<server>.ts` (main-thread entry) + `<server>_logic.ts` (`workerReady` init) + `cmd_handler.ts` (`regCmdHandler` calls) + `main_thread_config.json` + `worker_thread_config.json`. Command ids and DTO schemas shared with the web client live in `src/protocols/` (exported as `example-proj/protocols/*`, see [Polyrepo layout](#polyrepo-layout)); server-internal helpers (gid, redis, mongo, time) live in `src/shared/`. See [Diagrams](#diagrams) below for request flow and a production deployment.
+
+## Polyrepo layout
+
+The three `example-*` repos are independent git repositories and are expected to be cloned into the **same parent directory**:
+
+```
+<parent>/
+├── example-proj/          # this repo — three-server backend
+├── example-proj-cfg/      # designer Excel sheets + Luban/LMDB pipeline
+└── example-proj-client/   # Phaser 3 web client
+```
+
+Cross-repo wiring:
+
+| Consumer | Dependency | Mechanism | What it uses |
+|---|---|---|---|
+| `example-proj` | `example-proj-cfg` | `"file:../example-proj-cfg"` | Runtime config tables (`TbRank`, `RankType`, …) |
+| `example-proj-client` | `example-proj` | `"file:../example-proj"` | `example-proj/protocols/cmd_id` + `/cmd_proto` (command ids and DTO schemas) |
+| `example-proj-client` | `@dogsvr/cl-tsrpc` | npm registry | `@dogsvr/cl-tsrpc/protocols/*` (TSRPC Head / MsgCommon / PtlCommon / serviceProto) |
+
+`file:` resolves as a symlink under `node_modules/` (npm default `install-links=false`), so edits in a sibling repo are picked up immediately after rebuilding that sibling — no reinstall needed. The flip side: if you clone `example-proj-client` without `example-proj` next to it, `npm install` in the client fails with `ENOENT`. Clone every repo you intend to run **before** installing.
+
+Build order follows the dependency arrows — each repo consumes its upstream's compiled `dist/`, not source:
+
+1. **`example-proj-cfg`** first — `npm install && npm run build` produces `dist/lib/cfg.{js,d.ts}` (the package entry) and the LMDB tables. Its `dist/` is gitignored, so a fresh clone has nothing usable until you build.
+2. **`example-proj`** next — consumes `example-proj-cfg/dist/lib/*`. `npm run build` produces `dist/protocols/cmd_{id,proto}.{js,d.ts}` that the client depends on.
+3. **`example-proj-client`** last — consumes both `example-proj/dist/protocols/*` and `@dogsvr/cl-tsrpc/dist/shared/protocols/*`.
+
+Both `example-proj` and `@dogsvr/cl-tsrpc` expose only their `./protocols/*` subpath to the client; server-only modules (redis/mongo helpers, the `TsrpcCL` class) are whitelisted out of the browser bundle by the `exports` field.
 
 ## Prerequisites
 
@@ -40,15 +69,26 @@ docker run --name dog-redis   --network host -d redis redis-server --bind 127.0.
 
 ## Run
 
+Build `example-proj-cfg` first — this repo consumes its compiled `dist/lib/cfg.{js,d.ts}` via `file:../example-proj-cfg` (see [Polyrepo layout](#polyrepo-layout) for the full chain):
+
 ```sh
+cd <parent>
+git clone https://github.com/dogsvr/example-proj-cfg.git
 git clone https://github.com/dogsvr/example-proj.git
-cd example-proj
+
+cd example-proj-cfg
 npm install
-npm run build        # tsc + copy *.json configs into dist/
-npm run start        # pm2 start dir + zonesvr + battlesvr
-pm2 ls               # should show 3 processes running
-pm2 logs             # follow logs if anything is off
+npm run build                                  # Luban → LMDB + tsc → dist/lib/cfg.{js,d.ts}
+
+cd ../example-proj
+npm install
+npm run build                                  # tsc → dist/ (incl. dist/protocols/ for the client) + copy *.json configs
+npm run start                                  # pm2 start dir + zonesvr + battlesvr
+pm2 ls                                         # should show 3 processes running
+pm2 logs                                       # follow logs if anything is off
 ```
+
+Building `example-proj-cfg` requires the extra toolchain (dotnet + Luban + flatc + python3) described in its README — a fresh clone alone won't build it.
 
 ### Hot-updating worker logic
 
@@ -67,23 +107,30 @@ If you're hacking on `@dogsvr/dogsvr` / `cl-tsrpc` / `cl-grpc` / `cfg-luban` alo
 ```sh
 # In each sibling repo: npm link
 # Then, from here:
-npm run linkDog       # npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban example-proj-cfg
+npm run linkDog       # npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban
 ```
+
+`example-proj-cfg` is consumed via `file:../example-proj-cfg` and does not need `npm link` — the symlink is wired up by `npm install` directly.
 
 ## Running the client
 
+The client consumes `example-proj`'s compiled `dist/protocols/` — make sure the steps under [Run](#run) have completed successfully (both `example-proj-cfg` and `example-proj` built) before installing the client.
+
 ```sh
+cd <parent>                                        # same parent directory as example-proj/
 git clone https://github.com/dogsvr/example-proj-client.git
 cd example-proj-client
 npm install
-npm run start         # parcel serve, opens http://localhost:4567
+npm run start                                      # parcel serve, opens http://localhost:4567
 ```
 
 Log in through the browser and the game connects to the three servers started above.
 
+If you're also hacking on `@dogsvr/cl-tsrpc` locally, run `npm run linkDog` in the client after `npm install` — it links the client's own copy of `@dogsvr/cl-tsrpc` to the sibling repo. (This is separate from the server-side `linkDog` script above; each consuming repo has its own.)
+
 ## Config data
 
-Game tables (rewards, skills, items, …) live in [`example-proj-cfg`](https://github.com/dogsvr/example-proj-cfg) as designer-authored Excel sheets. Building that repo produces an LMDB database plus TypeScript accessors that `worker_thread_config.json` points the server processes at. See its README for the pipeline — you don't need to rebuild it to run the demo, there's a prebuilt artifact checked in.
+Game tables (rewards, skills, items, …) live in [`example-proj-cfg`](https://github.com/dogsvr/example-proj-cfg) as designer-authored Excel sheets. Building that repo produces an LMDB database plus TypeScript accessors that `worker_thread_config.json` points the server processes at. Its `dist/` is gitignored — a fresh clone has nothing usable until `npm run build` produces it (see [Run](#run) for the order). See the repo's README for the Luban pipeline.
 
 ## Diagrams
 

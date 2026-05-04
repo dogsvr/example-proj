@@ -3,7 +3,7 @@ import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
 // @ts-expect-error
 import * as Matter from "matter-js";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../../shared/cmd_id';
+import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 
 class Player extends Schema {
