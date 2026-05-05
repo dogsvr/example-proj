@@ -29,6 +29,7 @@ export type DirQueryZoneListRes = {
 export type ZoneLoginReq = {
     openId: string;
     zoneId: number;
+    name: string;
 };
 export type ZoneLoginRes = {
     role: RoleInfo;

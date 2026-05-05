@@ -11,7 +11,7 @@ A runnable three-server reference built on [`@dogsvr/dogsvr`](https://github.com
 - **Persistence**: MongoDB for player profiles + Redis for sessions, distributed locks, and ranking
 - **Real-time rooms** via Colyseus — both state-sync and lockstep variants
 - **Game config** via [`@dogsvr/cfg-luban`](https://github.com/dogsvr/cfg-luban) fed from the companion repo [`example-proj-cfg`](https://github.com/dogsvr/example-proj-cfg)
-- **Web client** lives in [`example-proj-client`](https://github.com/dogsvr/example-proj-client) (Phaser 3)
+- **Web client** lives in [`example-proj-client`](https://github.com/dogsvr/example-proj-client) (Phaser 4)
 
 ## Topology
 
@@ -33,7 +33,7 @@ The three `example-*` repos are independent git repositories and are expected to
 <parent>/
 ├── example-proj/          # this repo — three-server backend
 ├── example-proj-cfg/      # designer Excel sheets + Luban/LMDB pipeline
-└── example-proj-client/   # Phaser 3 web client
+└── example-proj-client/   # Phaser 4 web client
 ```
 
 Cross-repo wiring:

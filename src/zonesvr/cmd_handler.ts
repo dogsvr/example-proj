@@ -12,6 +12,13 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_LOGIN req:", req);
 
+    // `name` is required: the client composes req.openId as `${deviceId}:${name}`,
+    // so a missing / blank name here would produce a trailing-colon openId and
+    // a role doc with empty display name. Fail fast instead.
+    if (typeof req.name !== 'string' || !req.name.trim()) {
+        throw new dogsvr.HandlerError(1005, 'invalid name');
+    }
+
     const lockKey = "rolelock|" + req.openId + "|" + req.zoneId;
     dogsvr.debugLog("lockKey:", lockKey);
     const lock = new DistributedLock(lockKey);
@@ -32,12 +39,16 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
             if (gid < 0) {
                 throw new dogsvr.HandlerError(1001, 'generateGid failed');
             }
-            role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: "", score: 0 };
+            role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: req.name, score: 0 };
             const insertResult = await collection.insertOne(role);
             dogsvr.debugLog("register new role:", insertResult);
         }
         else {
             role = findResult[0];
+            // Existing-role branch: do NOT overwrite role.name. The openId
+            // already encodes the name (openId = `${deviceId}:${name}`), so
+            // finding a row here means the same (deviceId, name) pair that
+            // originally inserted it; rewriting `name` would be redundant IO.
             // role.score += 1;
             // const updateResult = await collection.updateOne({openId: req.openId, zoneId: req.zoneId}, {$set: {score: role.score}});
             // dogsvr.debugLog("update role:", updateResult);

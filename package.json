@@ -19,6 +19,8 @@
     "delete": "pm2 delete ecosystem.config.js",
     "logs": "pm2 logs exp-dir exp-zonesvr exp-battlesvr --lines 100",
     "status": "pm2 ls",
+    "ops": "node dist/scripts/ops.js",
+    "pack": "node dist/scripts/pack.js",
     "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban"
   },
   "author": "rowanzhu",
@@ -37,7 +39,6 @@
   "devDependencies": {
     "@types/node": "^24.12.2",
     "copyfiles": "^2.4.1",
-    "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   }
 }
