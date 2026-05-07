@@ -1,27 +1,8 @@
 /**
- * `npm run pack` — produce a release tar.gz of all three example-* projects.
- *
- * What and why:
- *   The three sibling repos (example-proj, example-proj-cfg, example-proj-client)
- *   are built and tar'd together with their runtime node_modules. On the target
- *   machine, `tar xzf <release>.tar.gz && cd example-proj && pm2 start` is all
- *   that's required — no npm registry access, no build tools.
- *
- * Structural invariants enforced by this script:
- *   1. The tar's top-level directory matches the tar's basename (common
- *      convention; keeps `tar xzf` from spraying files into $CWD).
- *   2. example-proj/, example-proj-cfg/, example-proj-client/ sit as siblings
- *      inside that top-level dir. The relative symlink
- *      `example-proj/node_modules/example-proj-cfg -> ../../example-proj-cfg`
- *      still resolves, AND the hard-coded runtime path
- *      `../../../example-proj-cfg/dist/db` in zonesvr_logic.ts still resolves.
- *   3. Symlinks are preserved (never dereferenced). Deref'ing would turn the
- *      cfg symlink into a duplicate copy (manageable, ~1 MB) but the @dogsvr
- *      symlinks in deep transitive deps would explode.
- *
- * Non-goals: minify, compress JS further, strip debug info, or generate
- * anything that isn't a literal copy of built output. Parcel already
- * minifies client JS; tsc+tsc's dist output is already what pm2 runs in prod.
+ * `npm run pack` — tar the three example-* projects (code + node_modules) for
+ * offline deploy. Preserves symlinks so the cfg file-link and @dogsvr transitive
+ * symlinks keep resolving; relies on the sibling layout expected by zonesvr's
+ * hard-coded `../../../example-proj-cfg/dist/db` path.
  */
 
 import * as fs from 'node:fs';
@@ -327,23 +308,10 @@ function gitSha(repoDir: string): string | null {
 }
 
 /**
- * Return true iff the working tree or index has any uncommitted changes.
- *
- * We run `git status --porcelain` and treat any non-empty output as dirty.
- * This catches:
- *   - modified but unstaged files
- *   - staged-but-not-committed files
- *   - untracked files (unless ignored by .gitignore)
- *
- * Rationale: the tar's payload is a literal copy of the working tree
- * (fs.cpSync in stage(), not `git archive`), so anything that makes the
- * working tree differ from HEAD also makes the tar differ from HEAD.
- * Surfacing that as "-dirty" in the tar name is the only safeguard against
- * ops confusing a dirty build with the committed sha.
- *
- * Returns false on missing git / non-repo / any error — same fall-through
- * semantics as gitSha(), so a non-git source directory just produces
- * "nogit" without dirty annotation.
+ * True if the working tree or index has any uncommitted changes (modified,
+ * staged, or untracked). The tar payload is a plain fs copy, not `git archive`,
+ * so dirty state must be surfaced in the tar name. Returns false on non-repo
+ * or any git error.
  */
 function gitDirty(repoDir: string): boolean {
     try {

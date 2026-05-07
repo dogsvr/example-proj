@@ -16,6 +16,7 @@ import type { OpsCommand } from '../command';
 import { zoneList, zoneAdd, zoneRemove } from './zone';
 import { roleList, roleGet, roleRemove } from './role';
 import { rankList, rankTop, rankClear, rankClearAll } from './rank';
+import { rankFill, rankUnfill } from './rank_fill';
 import { lockList, lockRelease } from './lock';
 import { gidCounterPeek } from './gid_counter';
 import { stats } from './stats';
@@ -27,6 +28,7 @@ export const commands: OpsCommand[] = [
     zoneList, zoneAdd, zoneRemove,
     roleList, roleGet, roleRemove,
     rankList, rankTop, rankClear, rankClearAll,
+    rankFill, rankUnfill,
     lockList, lockRelease,
     gidCounterPeek,
     stats,

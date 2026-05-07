@@ -45,20 +45,14 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
         }
         else {
             role = findResult[0];
-            // Existing-role branch: do NOT overwrite role.name. The openId
-            // already encodes the name (openId = `${deviceId}:${name}`), so
-            // finding a row here means the same (deviceId, name) pair that
-            // originally inserted it; rewriting `name` would be redundant IO.
+            // openId already encodes the name, so same (deviceId, name) → same row; no rewrite.
             // role.score += 1;
             // const updateResult = await collection.updateOne({openId: req.openId, zoneId: req.zoneId}, {$set: {score: role.score}});
             // dogsvr.debugLog("update role:", updateResult);
         }
 
         const res = { role: role };
-        // Patch res head with gid so cl-tsrpc ApiCommon.ts records conn.dogGid
-        // on first request. Subsequent requests will then have head.gid
-        // auto-filled, and zonesvr->battlesvr routing / rank updates will see
-        // the real gid instead of undefined.
+        // Stamp gid on res head so cl-tsrpc ApiCommon records conn.dogGid for subsequent requests.
         return { body: JSON.stringify(res), head: { gid: role.gid } };
     } finally {
         lockRes = await lock.unlock();

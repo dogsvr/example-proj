@@ -127,10 +127,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     }
   }
 
-  // Colyseus 0.15: onAuth's return value is passed as the 3rd argument of onJoin.
-  // We use a one-time ticket issued by BATTLE_START_BATTLE to recover the
-  // authenticated {gid, openId, zoneId}, so the client cannot spoof its identity
-  // by editing joinOptions.
+  // Verify a one-time ticket from BATTLE_START_BATTLE to recover the
+  // authenticated identity, so the client cannot spoof via joinOptions.
   async onAuth(client: Client, options: any): Promise<TicketPayload> {
     const payload = consumeTicket(options?.ticket);
     if (!payload) {
@@ -184,9 +182,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
   onDispose() {
     dogsvr.infoLog("room", this.roomId, "disposing...");
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
+    clearInterval(this.interval);
   }
 
 }

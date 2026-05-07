@@ -45,17 +45,14 @@ export class DistributedLock {
     }
 
     async tryLock() {
-        let lock = false;
-        let res = await client.set(this.lockKey, this.lockValue, { NX: true, EX: this.lockTTL });
-        if (res === 'OK') lock = true;
-        return lock;
+        const res = await client.set(this.lockKey, this.lockValue, { NX: true, EX: this.lockTTL });
+        return res === 'OK';
     }
 
     async unlock() {
         const lua_str = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end";
-        let res = await client.eval(lua_str, { keys: [this.lockKey], arguments: [this.lockValue] });
-        if (res === 1) return true;
-        return false;
+        const res = await client.eval(lua_str, { keys: [this.lockKey], arguments: [this.lockValue] });
+        return res === 1;
     }
 
     private randomStr() {
@@ -76,11 +73,8 @@ export class RankUtil {
     static readonly LOW_ACCU_TS_LOST = 30;
     static readonly MAX_SCORE_VALUE = 0xFFFFFFF; // 28-bit score field
     static readonly MAX_TS_VALUE = 0x1FFFFFF;    // 25-bit ts field
-    // Layout: [score:28bit][ts:25bit] packed into a 53-bit safe integer.
-    // We must use arithmetic (not JS bit ops) because `<<` / `>>` / `&` / `|`
-    // operate on 32-bit signed ints and would overflow / sign-extend once the
-    // score exceeds 64 (bit 6 shifted into bit 31 = sign bit) or 128 (bit 7
-    // shifted past int32). `TS_SHIFT` is the arithmetic equivalent of `<< 25`.
+    // Layout: [score:28bit][ts:25bit] in a 53-bit safe integer. Uses arithmetic
+    // (not `<<`/`|`) because JS bitwise ops truncate to int32.
     static readonly TS_SHIFT = 0x2000000; // 2 ** 25
     constructor(
         private tsAccuracyType: number,
@@ -137,7 +131,7 @@ export class RankUtil {
             return { rank: 0, score: 0, updateTs: 0 };
         }
         const { score, updateTs } = this.decodeScore(encodedScore);
-        return { rank: rank, score: score, updateTs: updateTs };
+        return { rank, score, updateTs };
     }
     async queryRank(redisKey: string, offset: number, count: number): Promise<Array<{ gid: number, score: number, updateTs: number }>> {
         let stop_idx = offset + count;
@@ -211,7 +205,7 @@ export class RankUtil {
         else {
             updateTs = this.baseTs + RankUtil.HIGH_ACCU_TS_OFFSET - updateTs;
         }
-        return { score: score, updateTs: updateTs };
+        return { score, updateTs };
     }
 }
 
