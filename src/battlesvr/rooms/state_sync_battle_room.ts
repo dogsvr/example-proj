@@ -6,42 +6,36 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 
-// ──────────────────────────────────────────────────────────────────────────
-// Gameplay constants. Map is ~2× a portrait phone so camera scrolls; player
-// fires a bullet every FIRE_INTERVAL in the opposite direction of last non-
-// zero movement. Bullets are pure physics: bounce off walls, other bullets,
-// and their owner; they only disappear on TTL expiry or when they hit a
-// non-owner player (which also kills that player and respawns them with
-// invulnerability).
-// ──────────────────────────────────────────────────────────────────────────
+// Gameplay constants. Player auto-fires every FIRE_INTERVAL opposite to
+// last non-zero movement; bullets are pure physics (bounce off walls,
+// other bullets, owner) and vanish on TTL or on hitting a non-owner
+// player, which also kills that player and respawns with invuln.
 const MAP_W = 800;
 const MAP_H = 1200;
 const PLAYER_SIZE = 20;
 const BALL_RADIUS = 5;
-const PLAYER_SPEED = 3;            // units per 60fps tick; setVelocity takes u/ms but Matter scales internally
+const PLAYER_SPEED = 3;            // units per 60fps tick; Matter scales internally
 const BALL_SPEED = 5;
 const FIRE_INTERVAL = 1000;        // ms
 const BALL_TTL = 5000;             // ms
-const INVULN_DURATION = 2500;      // ms (spawn protection + post-kill)
-const MAX_PLAYERS = 8;             // caps room size AND size of colour palette
+const INVULN_DURATION = 2500;      // ms (spawn + post-kill)
+const MAX_PLAYERS = 8;             // caps room size AND palette size
 
-// Matter collision categories. Players never collide with each other
+// Matter collision categories. Players don't collide with each other
 // (overlap freely); bullets collide with everything.
 const CAT_WALL = 0x0001;
 const CAT_PLAYER = 0x0002;
 const CAT_BALL = 0x0004;
 
-// Player.state enum — must stay in sync with the client scene.
+// Must match client.
 const STATE_ALIVE = 0;
 const STATE_INVULN = 1;
 
-// ──────────────────────────────────────────────────────────────────────────
-// IMPORTANT: schema field declaration order matters. Colyseus 0.17 applies
-// patches field-by-field in declaration order and fires matching `listen`
-// callbacks inline; the client's state→invuln-ring logic needs `state` to
-// fire before `x/y` so the explosion plays at the old (death) position
+// Schema field declaration order matters: Colyseus 0.17 applies patches
+// field-by-field in declaration order and fires `listen` callbacks inline.
+// `state` is declared first so the client's state→invuln-ring logic fires
+// before `x/y` updates, letting the explosion play at the death position
 // before the body teleports to the respawn point.
-// ──────────────────────────────────────────────────────────────────────────
 class Player extends Schema {
   @type("uint8")  state: number = STATE_INVULN;  // declared first on purpose
   @type("uint8")  colorIdx: number = 0;          // 0..MAX_PLAYERS-1, stable for the lifetime of the session
@@ -79,20 +73,18 @@ class RoomState extends Schema {
 }
 
 // Kill event buffered out of the Matter mid-step so we can safely mutate
-// the world (Composite.remove, balls.splice) from the outer tick loop.
+// the world from the outer tick loop.
 type PendingKill = { victim: Player; owner: Player; ball: Ball };
 
 export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   engine: Matter.Engine;
   maxClients = MAX_PLAYERS;
   private pendingKills: PendingKill[] = [];
-  // Track sessionId alongside Player on the body.plugin so collisionStart
-  // can look up the owner/victim without a MapSchema reverse-lookup.
+  // body.plugin side-channel so collisionStart can look up the owner/victim
+  // without a MapSchema reverse-lookup.
   private sessionIdByPlayer: Map<Player, string> = new Map();
-  // colorSlotTaken[i] === true iff colour slot i is owned by a live player.
-  // Allocation picks the lowest free slot so (at steady state) colours
-  // correspond to join order and every client sees the same colour for the
-  // same player.
+  // Lowest-free-slot allocation so (at steady state) colours match join
+  // order and every client sees the same colour for the same player.
   private colorSlotTaken: boolean[] = new Array(MAX_PLAYERS).fill(false);
 
   onCreate(options: any) {
@@ -111,8 +103,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
       const dx = input.right ? 1 : (input.left ? -1 : 0);
       const dy = input.down ? 1 : (input.up ? -1 : 0);
 
-      // setVelocity (not setPosition) — bullets need elastic collision
-      // with the player body; teleporting players every tick breaks that.
+      // setVelocity (not setPosition) so bullets still collide elastically.
       Matter.Body.setVelocity(player.body, { x: dx * PLAYER_SPEED, y: dy * PLAYER_SPEED });
 
       if (dx !== 0 || dy !== 0) {
@@ -149,28 +140,23 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   }
 
   private registerCollisionHandler() {
-    // collisionStart fires INSIDE Engine.update — do NOT Composite.remove
-    // here or we corrupt the resolver's iterator. Only enqueue; drain
-    // in update() after Engine.update returns.
+    // collisionStart fires INSIDE Engine.update — enqueue only, drain in
+    // update() after Engine.update returns (mutating mid-step corrupts
+    // the resolver).
     Matter.Events.on(this.engine, 'collisionStart', (event: any) => {
       for (const pair of event.pairs) {
         const pa = pair.bodyA.plugin ?? {};
         const pb = pair.bodyB.plugin ?? {};
 
-        // Identify ball + player by which side carries which schema.
         let ball: Ball | null = null, player: Player | null = null;
         if (pa.ball && pb.player) { ball = pa.ball; player = pb.player; }
         else if (pb.ball && pa.player) { ball = pb.ball; player = pa.player; }
-        else continue; // ball↔wall, ball↔ball, player↔wall: pure physics bounce, nothing to do
+        else continue; // wall↔ball, ball↔ball, wall↔player: pure physics
 
-        // Self-bounce: own bullet never hurts, Matter already reflected it.
+        // Self-bounce / invuln / orphan: bounce, no kill.
         const owner = this.state.players.get(ball!.ownerSessionId);
         if (owner === player) continue;
-
-        // Invulnerable victim: bullet physically bounces, no damage, no removal.
         if (player!.state === STATE_INVULN) continue;
-
-        // Orphan bullet (owner left the room): treat as inert (bounces, no kill).
         if (!owner) continue;
 
         this.pendingKills.push({ victim: player!, owner, ball: ball! });
@@ -182,8 +168,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     Matter.Engine.update(this.engine, deltaTime);
     const now = this.engine.timing.timestamp;
 
-    // ── 1. Drain kills queued during Engine.update. De-dup by victim + ball
-    //      so a double-touch in the same tick doesn't double-count.
+    // 1. Drain kills queued during Engine.update. De-dup by victim + ball
+    //    so a double-touch in the same tick doesn't double-count.
     if (this.pendingKills.length > 0) {
       const killedBalls = new Set<Ball>();
       const killedVictims = new Set<Player>();
@@ -199,7 +185,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
       this.pendingKills.length = 0;
     }
 
-    // ── 2. Per-player: expire invuln, auto-fire.
+    // 2. Per-player: expire invuln, auto-fire.
     for (const [sid, player] of this.state.players) {
       if (!player.body) continue;
 
@@ -209,14 +195,13 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
       if (player.hasMoved && now >= player.nextFireTs) {
         this.spawnBall(player, sid, now);
-        // Accumulate, don't clamp to `now + FIRE_INTERVAL` — accumulation
-        // keeps the cadence steady under tick jitter; multi-step catch-up
-        // is fine because player has to move to fire anyway.
+        // Accumulate (not `now + FIRE_INTERVAL`) — keeps cadence steady
+        // under tick jitter; multi-step catch-up is fine.
         player.nextFireTs += FIRE_INTERVAL;
       }
     }
 
-    // ── 3. Expire balls past TTL. Iterate in reverse so splice is safe.
+    // 3. Expire balls past TTL. Reverse iterate for splice safety.
     for (let i = this.state.balls.length - 1; i >= 0; i--) {
       const ball = this.state.balls[i];
       if (!ball) continue;
@@ -225,7 +210,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
       }
     }
 
-    // ── 4. Mirror Matter body positions into the schema for the client.
+    // 4. Mirror Matter body positions into the schema for the client.
     for (const player of this.state.players.values()) {
       if (player.body) {
         player.x = player.body.position.x;
@@ -287,15 +272,13 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     player.y = y;
     player.state = STATE_INVULN;
     player.invulnUntilTs = now + INVULN_DURATION;
-    // Reset input latch — forces player to re-move after respawn before
-    // auto-firing resumes. Feels less chaotic than auto-firing from the
-    // respawn point in a direction the player didn't choose.
+    // Reset input latch — force re-move before auto-firing resumes.
     player.hasMoved = false;
     player.lastDirX = 0;
     player.lastDirY = 0;
   }
 
-  /** Lowest-free-slot allocation so colours are stable + predictable. */
+  /** Lowest-free slot so colours are stable + predictable. */
   private allocColorSlot(): number {
     for (let i = 0; i < this.colorSlotTaken.length; i++) {
       if (!this.colorSlotTaken[i]) {
@@ -303,8 +286,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
         return i;
       }
     }
-    // Should be unreachable: maxClients enforces the cap upstream. Safety
-    // net: wrap so a join-after-leave race can't crash the sim.
+    // Unreachable under maxClients cap; wrap so a join-after-leave race
+    // can't crash the sim.
     return 0;
   }
 
@@ -334,9 +317,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     player.colorIdx = this.allocColorSlot();
     player.x = Math.random() * (MAP_W - PLAYER_SIZE) + PLAYER_SIZE / 2;
     player.y = Math.random() * (MAP_H - PLAYER_SIZE) + PLAYER_SIZE / 2;
-    // Spawn protection: invulnerable for INVULN_DURATION from the first moment
-    // the player exists, so a stray bullet can't kill them before they've
-    // even seen the map.
+    // Spawn protection — a stray bullet shouldn't kill before the player
+    // has even seen the map.
     player.state = STATE_INVULN;
     player.invulnUntilTs = now + INVULN_DURATION;
 
@@ -355,8 +337,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     this.state.players.set(client.sessionId, player);
   }
 
-  // colyseus 0.17: onLeave's 2nd arg changed from `consented: boolean` to
-  // `code?: number` (WebSocket close code). We don't branch on it.
+  // colyseus 0.17: onLeave's 2nd arg is `code?: number` (close code), not
+  // `consented: boolean` like 0.16. We don't branch on it.
   onLeave(client: Client, code?: number) {
     dogsvr.infoLog(client.sessionId, "left!");
     const player = this.state.players.get(client.sessionId);
@@ -364,8 +346,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
     const scoreChange = player.kills;
 
-    // Fire-and-forget to zonesvr: kills become score, which also updates the
-    // leaderboard on the zonesvr side (forEachCfgRow TbRank in cmd_handler).
+    // Fire-and-forget to zonesvr: kills → score → leaderboard update
+    // (forEachCfgRow TbRank in cmd_handler).
     dogsvr.callCmdByClc("zonesvr", {
       cmdId: cmdId.ZONE_BATTLE_END_NTF,
       openId: player.openId,

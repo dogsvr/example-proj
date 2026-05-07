@@ -3,24 +3,20 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 
-// ──────────────────────────────────────────────────────────────────────────
-// Lockstep battle room. Gameplay rules match state-sync exactly — shooting,
-// self-ball bounce, enemy-ball kill, respawn with invuln, kill tally — but
-// all physics / game logic runs on the client. The server only:
-//   1. generates a room seed and sends it to each joining client
-//   2. maintains a broadcast frame queue at 20 fps
-//   3. relays player input into the current frame
-//   4. injects join/leave actions so clients can materialise/remove entities
-//   5. collects `reportKills` from clients so it can emit ZONE_BATTLE_END_NTF
-//      with the real kill count on onLeave.
+// Lockstep battle room. Gameplay rules match state-sync (shooting, self-
+// ball bounce, enemy-ball kill, respawn with invuln, kill tally), but all
+// physics / game logic runs on the CLIENT. Server responsibilities:
+//   1. generate seed and send to each joining client
+//   2. broadcast action frames at 20 fps
+//   3. relay player input
+//   4. inject join/leave actions
+//   5. collect `reportKills` from the client so onLeave can emit
+//      ZONE_BATTLE_END_NTF with the real kill count
 //
-// Late joiners receive the full history of CLOSED frames on connect and
-// fast-forward through them locally; combined with the deterministic
-// client-side sim this rebuilds the exact current world state (player
-// positions, in-flight bullets, kill counts, invuln timers). A snapshot
-// of spawn positions alone is insufficient — there's no way to recover
-// what happened between join and now without replaying the action stream.
-// ──────────────────────────────────────────────────────────────────────────
+// Late joiners receive the history of closed frames and fast-forward
+// locally; combined with the deterministic client sim this rebuilds the
+// current world state. A spawn-position snapshot alone would miss
+// in-flight bullets / kill counts / invuln timers that happened since.
 const MAP_W = 800;
 const MAP_H = 1200;
 const PLAYER_SIZE = 20;
@@ -40,20 +36,17 @@ export class LockstepSyncBattleRoom extends Room {
   private seed: number = 0;
   private frameArray: Frame[] = [];
   private currFrameId: number = 0;
-  // Colour-slot pool: same scheme as state-sync so every client sees a
-  // stable, consistent colour per player.
+  // Colour-slot pool: same scheme as state-sync for cross-client stability.
   private colorSlotTaken: boolean[] = new Array(MAX_PLAYERS).fill(false);
-  // Per-client housekeeping: auth survives onAuth → onJoin → onLeave
-  // (Colyseus 0.17 doesn't pass auth to onLeave); colorIdx released on
-  // leave; finalKills arrives via `reportKills` just before the client
-  // issues its leave request.
+  // Per-client housekeeping. Colyseus 0.17 doesn't pass auth to onLeave, so
+  // we cache it here; finalKills arrives via `reportKills` just before leave.
   private authBySid: Map<string, TicketPayload> = new Map();
   private colorIdxBySid: Map<string, number> = new Map();
   private finalKills: Map<string, number> = new Map();
 
   onCreate(options: any) {
-    // 32-bit unsigned room seed — clients feed this into a shared mulberry32
-    // PRNG for any draw that must stay lockstep-consistent (respawn pos).
+    // 32-bit unsigned seed feeds the client's mulberry32 PRNG for any
+    // draw that must stay lockstep-consistent (respawn position).
     this.seed = (Math.random() * 0xFFFFFFFF) >>> 0;
 
     this.frameArray.push(new Frame(0));
@@ -65,8 +58,7 @@ export class LockstepSyncBattleRoom extends Room {
     });
 
     this.onMessage("reportKills", (client, n: number) => {
-      // Trust the client (demo). Clamp to non-negative int. reportKills may
-      // fire multiple times; the last value before onLeave wins.
+      // Trust the client (demo). May fire multiple times; last value wins.
       if (typeof n === 'number' && Number.isFinite(n) && n >= 0) {
         this.finalKills.set(client.sessionId, Math.floor(n));
       }
@@ -116,16 +108,14 @@ export class LockstepSyncBattleRoom extends Room {
     this.authBySid.set(client.sessionId, auth);
     this.colorIdxBySid.set(client.sessionId, colorIdx);
 
-    // Non-deterministic Math.random is fine here — the join action carries
-    // the resolved spawn position so clients don't need to re-roll it.
+    // Non-deterministic Math.random is fine — the join action carries the
+    // resolved spawn position so clients don't re-roll it.
     const spawnX = Math.random() * (MAP_W - PLAYER_SIZE) + PLAYER_SIZE / 2;
     const spawnY = Math.random() * (MAP_H - PLAYER_SIZE) + PLAYER_SIZE / 2;
 
-    // Capture the history BEFORE adding our join action. The join goes into
-    // the currently-open frame which will broadcast next frameTick — the
-    // newcomer will receive it through the normal broadcastFrame stream
-    // (not through historicalFrames), avoiding a double-create of self.
-    // `historicalFrames` = every frame already closed + broadcast to others.
+    // Capture history BEFORE adding our join — the join lands in the
+    // currently-open frame, which the newcomer receives via broadcastFrame
+    // (not historicalFrames), avoiding a double-create of self.
     const historicalFrames = this.frameArray.slice(0, -1);
 
     this.addAction({
@@ -134,11 +124,9 @@ export class LockstepSyncBattleRoom extends Room {
       args: [client.sessionId, auth.gid, colorIdx, spawnX, spawnY],
     });
 
-    // Init packet. `historicalFrames` lets the client fast-forward its
-    // local sim to the current world state before applying live frames.
-    // Cost: O(N frames) JSON payload + O(N × step) client CPU during
-    // replay. Acceptable for a demo-scale match; for long-running rooms
-    // we'd snapshot + compact every few minutes.
+    // Init packet with history so the client fast-forwards to the current
+    // world state. Cost: O(N frames) payload + replay CPU. Fine for
+    // demo-scale matches; long-running rooms would snapshot+compact.
     client.send(0, {
       seed: this.seed,
       selfSessionId: client.sessionId,
@@ -148,8 +136,8 @@ export class LockstepSyncBattleRoom extends Room {
     });
   }
 
-  // colyseus 0.17: onLeave's 2nd arg changed from `consented: boolean` to
-  // `code?: number` (WebSocket close code). We don't branch on it.
+  // colyseus 0.17: onLeave's 2nd arg is `code?: number` (close code), not
+  // `consented: boolean` like 0.16. We don't branch on it.
   onLeave(client: Client, code?: number) {
     dogsvr.infoLog(client.sessionId, "left!");
     const sid = client.sessionId;
