@@ -40,6 +40,7 @@ class Player extends Schema {
   @type("uint8")  state: number = STATE_INVULN;  // declared first on purpose
   @type("uint8")  colorIdx: number = 0;          // 0..MAX_PLAYERS-1, stable for the lifetime of the session
   @type("uint16") kills: number = 0;
+  @type("uint16") deaths: number = 0;
   @type("number") gid: number = 0;
   @type("number") x: number = 0;
   @type("number") y: number = 0;
@@ -179,6 +180,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
         killedVictims.add(k.victim);
 
         k.owner.kills++;
+        k.victim.deaths++;
         this.removeBall(k.ball);
         this.respawnPlayer(k.victim, now);
       }
@@ -242,10 +244,11 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     });
     ball.body.plugin = { ball };
 
-    // Fire in the reverse of the last non-zero movement direction.
+    // Fire along last-non-zero move direction. Owner-self collision is
+    // filtered in collisionStart, so first-frame overlap is harmless.
     Matter.Body.setVelocity(ball.body, {
-      x: -player.lastDirX * BALL_SPEED,
-      y: -player.lastDirY * BALL_SPEED,
+      x: player.lastDirX * BALL_SPEED,
+      y: player.lastDirY * BALL_SPEED,
     });
 
     Matter.Composite.add(this.engine.world, ball.body);

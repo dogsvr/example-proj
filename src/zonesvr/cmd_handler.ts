@@ -81,6 +81,10 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     const req: cmdProto.ZoneBattleEndNtf = JSON.parse(reqMsg.body as string);
     dogsvr.debugLog("ZONE_BATTLE_END_NTF:", req);
 
+    // No-op when score is unchanged. Empty string keeps the txn-reply contract
+    // (see end-of-handler comment).
+    if (!req.scoreChange) return '';
+
     const lockKey = "rolelock|" + reqMsg.head.openId + "|" + reqMsg.head.zoneId;
     dogsvr.debugLog("lockKey:", lockKey);
     const lock = new DistributedLock(lockKey);
