@@ -68,6 +68,13 @@ export type ZoneQueryRankListRes = {
     selfRank: RankMember;
 };
 
+export type ZoneHeartbeatReq = {
+    clientTs: number;
+};
+export type ZoneHeartbeatRes = {
+    serverTs: number;
+};
+
 export type BattleStartBattleReq = {
     syncType: string;
 };

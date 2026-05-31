@@ -5,7 +5,7 @@ import { DistributedLock, RankUtil } from "../shared/redis_proxy";
 import { getCfgRow, forEachCfgRow } from '@dogsvr/cfg-luban';
 import type { RankT } from 'example-proj-cfg';
 import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
-import { now } from "../shared/time_util";
+import { now, nowMs } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
 
 dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
@@ -172,5 +172,12 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
             rank: i + 1
         });
     }
+    return JSON.stringify(res);
+})
+
+dogsvr.regCmdHandler(cmdId.ZONE_HEARTBEAT, async (reqMsg) => {
+    const req: cmdProto.ZoneHeartbeatReq = JSON.parse(reqMsg.body as string);
+    dogsvr.debugLog("ZONE_HEARTBEAT req:", req);
+    const res: cmdProto.ZoneHeartbeatRes = { serverTs: nowMs() };
     return JSON.stringify(res);
 })
