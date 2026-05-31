@@ -49,7 +49,8 @@ class Player extends Schema {
   openId: string = "";
   zoneId: number = 0;
   body: Matter.Body | null = null;
-  lastDirX: number = 0;            // -1 | 0 | 1
+  // Unit vector of last non-zero move; bullets fire at lastDir * BALL_SPEED.
+  lastDirX: number = 0;
   lastDirY: number = 0;
   hasMoved: boolean = false;       // gate firing until first input
   invulnUntilTs: number = 0;       // engine.timing.timestamp (ms, sim clock)
@@ -101,15 +102,22 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.body) return;
 
-      const dx = input.right ? 1 : (input.left ? -1 : 0);
-      const dy = input.down ? 1 : (input.up ? -1 : 0);
+      // Client sends a normalized 2D vector (magnitude ≤ 1). Clamp + re-normalize
+      // defensively so a malformed payload can't exceed PLAYER_SPEED.
+      let dx = Math.max(-1, Math.min(1, typeof input?.dx === 'number' ? input.dx : 0));
+      let dy = Math.max(-1, Math.min(1, typeof input?.dy === 'number' ? input.dy : 0));
+      const mag = Math.hypot(dx, dy);
+      if (mag > 1) { dx /= mag; dy /= mag; }
 
       // setVelocity (not setPosition) so bullets still collide elastically.
       Matter.Body.setVelocity(player.body, { x: dx * PLAYER_SPEED, y: dy * PLAYER_SPEED });
 
-      if (dx !== 0 || dy !== 0) {
-        player.lastDirX = dx;
-        player.lastDirY = dy;
+      if (mag > 0) {
+        // Store unit vector so spawnBall's lastDir * BALL_SPEED is full speed
+        // even when the stick is half-extended.
+        const inv = 1 / Math.min(mag, 1);
+        player.lastDirX = dx * inv;
+        player.lastDirY = dy * inv;
         if (!player.hasMoved) {
           player.hasMoved = true;
           player.nextFireTs = this.engine.timing.timestamp + FIRE_INTERVAL;
