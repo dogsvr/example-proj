@@ -3,6 +3,8 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 
+const log = dogsvr.log.child({ module: 'battlesvr/rooms/lockstep_sync_battle_room' });
+
 // Lockstep battle room. Gameplay rules match state-sync (shooting, self-
 // ball bounce, enemy-ball kill, respawn with invuln, kill tally), but all
 // physics / game logic runs on the CLIENT. Server responsibilities:
@@ -38,8 +40,8 @@ export class LockstepSyncBattleRoom extends Room {
   private currFrameId: number = 0;
   // Colour-slot pool: same scheme as state-sync for cross-client stability.
   private colorSlotTaken: boolean[] = new Array(MAX_PLAYERS).fill(false);
-  // Per-client housekeeping. Colyseus 0.17 doesn't pass auth to onLeave, so
-  // we cache it here; finalKills arrives via `reportKills` just before leave.
+  // Colyseus 0.17 doesn't pass auth to onLeave, so we cache it here;
+  // finalKills arrives via `reportKills` just before leave.
   private authBySid: Map<string, TicketPayload> = new Map();
   private colorIdxBySid: Map<string, number> = new Map();
   private finalKills: Map<string, number> = new Map();
@@ -58,7 +60,7 @@ export class LockstepSyncBattleRoom extends Room {
     });
 
     this.onMessage("reportKills", (client, n: number) => {
-      // Trust the client (demo). May fire multiple times; last value wins.
+      // Trust the client (demo). Last value wins.
       if (typeof n === 'number' && Number.isFinite(n) && n >= 0) {
         this.finalKills.set(client.sessionId, Math.floor(n));
       }
@@ -66,8 +68,7 @@ export class LockstepSyncBattleRoom extends Room {
   }
 
   private frameTick() {
-    // Broadcast the frame that just closed, open a fresh one. Clients
-    // drain frames out of their local buffer in execFrame order.
+    // Broadcast the closed frame, open a fresh one.
     const closed = this.frameArray[this.frameArray.length - 1];
     this.broadcast("broadcastFrame", closed);
     this.currFrameId++;
@@ -102,7 +103,7 @@ export class LockstepSyncBattleRoom extends Room {
     if (!auth) {
       throw new Error("onJoin called without auth payload");
     }
-    dogsvr.infoLog(client.sessionId, auth.gid, auth.openId, auth.zoneId, "joined!");
+    log.info({ sessionId: client.sessionId, gid: auth.gid, openId: auth.openId, zoneId: auth.zoneId }, "joined");
 
     const colorIdx = this.allocColorSlot();
     this.authBySid.set(client.sessionId, auth);
@@ -124,9 +125,7 @@ export class LockstepSyncBattleRoom extends Room {
       args: [client.sessionId, auth.gid, colorIdx, spawnX, spawnY],
     });
 
-    // Init packet with history so the client fast-forwards to the current
-    // world state. Cost: O(N frames) payload + replay CPU. Fine for
-    // demo-scale matches; long-running rooms would snapshot+compact.
+    // Init packet with history so the client can fast-forward to the current world state.
     client.send(0, {
       seed: this.seed,
       selfSessionId: client.sessionId,
@@ -139,7 +138,7 @@ export class LockstepSyncBattleRoom extends Room {
   // colyseus 0.17: onLeave's 2nd arg is `code?: number` (close code), not
   // `consented: boolean` like 0.16. We don't branch on it.
   onLeave(client: Client, code?: number) {
-    dogsvr.infoLog(client.sessionId, "left!");
+    log.info({ sessionId: client.sessionId }, "left");
     const sid = client.sessionId;
     const auth = this.authBySid.get(sid);
 
@@ -161,7 +160,6 @@ export class LockstepSyncBattleRoom extends Room {
   }
 
   onDispose() {
-    dogsvr.infoLog("room", this.roomId, "disposing...");
-    // setSimulationInterval is auto-cleared by Colyseus on dispose.
+    log.info({ roomId: this.roomId }, "room disposing");
   }
 }

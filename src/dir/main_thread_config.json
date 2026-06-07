@@ -2,7 +2,10 @@
     "workerThreadRunFile": "./dir_logic.js",
     "workerThreadNum": 2,
     "workerConfigPath": "./worker_thread_config.json",
-    "logLevel": "trace",
+    "log": {
+        "level": "trace",
+        "mode": "inline"
+    },
     "cl": {
         "tsrpc": { "type": "tsrpc", "svrType": "http", "port": 10000 }
     }

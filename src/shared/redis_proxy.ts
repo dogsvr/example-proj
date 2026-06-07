@@ -1,8 +1,10 @@
 import { createClient } from '@redis/client';
-import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
+import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
 import { RankType, type RankT } from 'example-proj-cfg';
 import type { RoleInfo } from '../protocols/cmd_proto';
+
+const log = rootLog.child({ module: 'shared/redis_proxy' });
 
 let client: ReturnType<typeof createClient>;
 
@@ -10,7 +12,7 @@ export async function initRedis(url: string) {
     client = createClient({ url: url });
     client.on('error', err => console.log('Redis Client Error', err));
     await client.connect();
-    dogsvr.infoLog('redis connected');
+    log.info('redis connected');
 }
 
 export function getRedisClient() {
@@ -62,7 +64,7 @@ export class DistributedLock {
 
 export enum RankTsAccuracyType {
     HIGH = 1, // activityStartTs + 365 days - submitTs
-    LOW = 2   // (rankEndTs - submitTs) / 30
+    LOW = 2   // (rankEndTs - submitTs) / 30 (30s buckets)
 }
 export enum RankOrderType {
     DESC = 1,
@@ -73,8 +75,8 @@ export class RankUtil {
     static readonly LOW_ACCU_TS_LOST = 30;
     static readonly MAX_SCORE_VALUE = 0xFFFFFFF; // 28-bit score field
     static readonly MAX_TS_VALUE = 0x1FFFFFF;    // 25-bit ts field
-    // Layout: [score:28bit][ts:25bit] in a 53-bit safe integer. Uses arithmetic
-    // (not `<<`/`|`) because JS bitwise ops truncate to int32.
+    // Layout: [score:28bit][ts:25bit] packed into a 53-bit safe integer.
+    // Uses arithmetic (not `<<`/`|`) because JS bitwise ops truncate to int32.
     static readonly TS_SHIFT = 0x2000000; // 2 ** 25
     constructor(
         private tsAccuracyType: number,
@@ -85,11 +87,8 @@ export class RankUtil {
         private expireTs: number) {
     }
     /**
-     * Build a RankUtil + its Redis key from a TbRank config row.
-     * Key is composed by `keyBuilder` (defaults to {@link defaultRankKeyBuilder}), which
-     * reads role dimension fields based on `row.type` (RankType). Callers that need a
-     * different scheme (e.g. seasonal buckets, custom prefix per environment) pass a
-     * custom builder.
+     * Build a RankUtil + Redis key from a TbRank config row.
+     * Pass a custom keyBuilder when the default scheme doesn't fit.
      */
     static fromCfg(
         row: RankT,
@@ -109,10 +108,7 @@ export class RankUtil {
     async updateRank(redisKey: string, gid: number, score: number, updateTs: number) {
         const encodedScore = this.encodeScore(score, updateTs);
         const memberKey = String(gid);
-        // @redis/client surfaces failures by rejecting the promise; zAdd's
-        // numeric return is "elements newly added" (0 when the member already
-        // existed and we just refreshed its score — both are success paths).
-        // Let callers see any real Redis error via uncaught rejection.
+        // zAdd returns "elements newly added" (0 on score-update, both are success).
         await client.zAdd(redisKey, [{ score: encodedScore, value: memberKey }]);
         await client.zRemRangeByRank(redisKey, 0, -1 - this.rankCapacity);
         if (this.expireTs > 0) {
@@ -138,9 +134,7 @@ export class RankUtil {
         if (stop_idx > 0) {
             stop_idx -= 1;
         }
-        // zRangeWithScores always resolves to an array (empty when the key
-        // doesn't exist); real failures reject the promise and will surface
-        // via uncaught rejection instead of a null sentinel.
+        // zRangeWithScores returns empty array when key doesn't exist; real failures reject.
         const res = await client.zRangeWithScores(redisKey, offset, stop_idx, { REV: true });
         let rankList: Array<{ gid: number, score: number, updateTs: number }> = [];
         for (let i = 0; i < res.length; i++) {
@@ -159,38 +153,29 @@ export class RankUtil {
             score = Math.floor(score / this.scoreAccuracyOffset);
         }
         if (score > RankUtil.MAX_SCORE_VALUE || score < 0) {
-            dogsvr.warnLog('encodeScore|invalid score|%d', score);
+            log.warn({ score }, 'encodeScore: invalid score');
             return 0;
         }
         if (this.tsAccuracyType == RankTsAccuracyType.LOW) {
-            // Floor to integer: (baseTs - updateTs) is not guaranteed divisible
-            // by LOW_ACCU_TS_LOST (30). A fractional ts leaks into the packed
-            // double as `score * 2^25 + ts_frac`, and ULP errors in the
-            // subsequent `* 30` at decode time produce e.g. 1777882933.000002
-            // instead of 1777882933. Quantizing here is also the business
-            // intent of LOW accuracy (30s bucket).
+            // Floor to integer: (baseTs - updateTs) may not be divisible by LOW_ACCU_TS_LOST.
+            // Quantizing is also the business intent of LOW accuracy (30s bucket).
             updateTs = Math.floor((this.baseTs - updateTs) / RankUtil.LOW_ACCU_TS_LOST);
         }
         else {
-            // HIGH mode currently takes integer inputs only; floor defensively
-            // so any future non-integer baseTs / HIGH_ACCU_TS_OFFSET can't
-            // leak fractional bits into the packed score.
+            // HIGH mode: floor defensively so non-integer inputs don't leak fractional bits.
             updateTs = Math.floor(this.baseTs + RankUtil.HIGH_ACCU_TS_OFFSET - updateTs);
         }
         if (updateTs > RankUtil.MAX_TS_VALUE || updateTs < 0) {
-            dogsvr.warnLog('encodeScore|invalid updateTs|%d', updateTs);
+            log.warn({ updateTs }, 'encodeScore: invalid updateTs');
             return 0;
         }
         if (this.rankOrder == RankOrderType.ASC) {
             score = RankUtil.MAX_SCORE_VALUE - score;
         }
-        // Arithmetic pack: (score * 2^25) + ts. The two fields are disjoint so
-        // `+` is equivalent to `|`. Result is ≤ 2^53 - 1, safe as a JS Number
-        // and as a Redis zset score (which is stored as a double).
+        // Arithmetic pack: (score * 2^25) + ts. Result ≤ 2^53 - 1, safe as JS Number and Redis zset score.
         return score * RankUtil.TS_SHIFT + updateTs;
     }
     private decodeScore(encodedScore: number): { score: number, updateTs: number } {
-        // Arithmetic unpack, inverse of encodeScore.
         let updateTs = encodedScore % RankUtil.TS_SHIFT;
         let score = Math.floor(encodedScore / RankUtil.TS_SHIFT);
         if (this.rankOrder == RankOrderType.ASC) {
@@ -209,37 +194,17 @@ export class RankUtil {
     }
 }
 
-/**
- * Build a Redis key string for a given rank config row and the role whose rank
- * dimension we care about. Passed to {@link RankUtil.fromCfg} when the default
- * scheme does not fit.
- */
+/** Build a Redis key for a rank config row and role. Passed to RankUtil.fromCfg. */
 export type RankKeyBuilder = (row: RankT, role: RoleInfo) => string;
 
 /**
- * Default key scheme: `rank|{row.id}|{type-tag}[|{dimension}]`.
+ * Default key scheme: `rank|{row.id}|{type-tag}[|{dimension}]`
+ *   - RankType_AllZone:  `rank|{id}|allzone`
+ *   - RankType_Zone:     `rank|{id}|zone|{role.zoneId ?? 0}`
+ *   - RankType_City:     `rank|{id}|city|{role.cityId ?? 0}`
+ *   - RankType_Province: `rank|{id}|province|{role.provinceId ?? 0}`
  *
- * The `type-tag` segment labels the RankType so keys are self-describing and
- * unambiguous under `SCAN MATCH rank|{id}|*`. The optional `{dimension}` segment
- * is the role's corresponding scope id:
- *   - RankType_AllZone:  -> `rank|{id}|allzone`
- *   - RankType_Zone:     -> `rank|{id}|zone|{role.zoneId ?? 0}`
- *   - RankType_City:     -> `rank|{id}|city|{role.cityId ?? 0}`
- *   - RankType_Province: -> `rank|{id}|province|{role.provinceId ?? 0}`
- *
- * Conventions locked in by this builder (extend with care):
- *   1. The `rank|` Redis namespace is reserved for keys produced here; do not
- *      collide from elsewhere in the codebase.
- *   2. Type-tag style is lowercase-compact (`allzone`, not `all_zone` / `AllZone`).
- *      Any new RankType added to rank.xlsx must follow the same style when its
- *      case is added here.
- *   3. Missing role.cityId / role.provinceId falls back to 0. This assumes 0
- *      is NOT a valid city/province id in business data; revisit if that
- *      assumption changes.
- *
- * Throws on unknown RankType so that configuration drift (e.g. a new RankType
- * added to rank.xlsx without updating this builder) surfaces loudly instead of
- * silently bucketing everyone into a stray board.
+ * Throws on unknown RankType so cfg drift surfaces loudly.
  */
 export const defaultRankKeyBuilder: RankKeyBuilder = (row, role) => {
     const prefix = `rank|${row.id}`;

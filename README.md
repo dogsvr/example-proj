@@ -19,11 +19,18 @@ A runnable three-server reference built on [`@dogsvr/dogsvr`](https://github.com
 |---|---|---|---|---|
 | **dir** | `10000` HTTP | tsrpc | — | Registration, zone list |
 | **zonesvr** | `20000` WS, `20001` gRPC | tsrpc + grpc | → battlesvr (grpc) | Login, main game loop, leaderboards |
-| **battlesvr** | `30001` gRPC, `30040` Colyseus | grpc | → zonesvr (grpc) | Real-time battle rooms (state-sync + lockstep) |
+| **battlesvr** | `30001` gRPC, `30040` Colyseus WS | grpc | → zonesvr (grpc) | Real-time battle rooms (state-sync + lockstep) |
 
-The port numbers above are just the values wired up in this demo's `main_thread_config.json` / `worker_thread_config.json`; in a real deployment plan your own port map and tweak those configs accordingly.
+The port numbers above are the values wired in `main_thread_config.json` / `worker_thread_config.json`; change them freely for your own deployment.
 
-Each server lives under `src/<server>/` and follows the same shape: `<server>.ts` (main-thread entry) + `<server>_logic.ts` (`workerReady` init) + `cmd_handler.ts` (`regCmdHandler` calls) + `main_thread_config.json` + `worker_thread_config.json`. Command ids and DTO schemas shared with the web client live in `src/protocols/` (exported as `example-proj/protocols/*`, see [Polyrepo layout](#polyrepo-layout)); server-internal helpers (gid, redis, mongo, time) live in `src/shared/`. See [Diagrams](#diagrams) below for request flow and a production deployment.
+Each server under `src/<server>/` follows the same structure:
+
+- `<server>.ts` — main-thread entry (`loadMainThreadConfig`, `setupLogger`, `startServer`)
+- `<server>_logic.ts` — worker entry (`workerReady`, `setupLoggerInWorker`, DB init)
+- `cmd_handler.ts` — handler registrations (`regCmdHandler`)
+- `main_thread_config.json` + `worker_thread_config.json`
+
+Shared protocols (command IDs + DTO schemas, used by both server and client) live in `src/protocols/`. Server-internal helpers (gid, redis, mongo, time) live in `src/shared/`. See [Diagrams](#diagrams) for request flow.
 
 ## Polyrepo layout
 
@@ -85,7 +92,7 @@ npm install
 npm run build                                  # tsc → dist/ (incl. dist/protocols/ for the client) + copy *.json configs
 npm run start                                  # pm2 start dir + zonesvr + battlesvr
 pm2 ls                                         # should show 3 processes running
-pm2 logs                                       # follow logs if anything is off
+npm run logs                                   # follow logs (NDJSON piped through pino-pretty)
 ```
 
 Building `example-proj-cfg` requires the extra toolchain (dotnet + Luban + flatc + python3) described in its README — a fresh clone alone won't build it.
@@ -93,10 +100,12 @@ Building `example-proj-cfg` requires the extra toolchain (dotnet + Luban + flatc
 ### Hot-updating worker logic
 
 ```sh
-pm2 trigger dir       hotUpdate
-pm2 trigger zonesvr   hotUpdate
-pm2 trigger battlesvr hotUpdate
+pm2 trigger exp-dir       hotUpdate
+pm2 trigger exp-zonesvr   hotUpdate
+pm2 trigger exp-battlesvr hotUpdate
 ```
+
+Process names (`exp-dir`, `exp-zonesvr`, `exp-battlesvr`) are defined in `ecosystem.config.js`; adjust if you rename them.
 
 The main thread drains in-flight txns, replaces workers, and new requests start hitting the new code — no dropped connections.
 
@@ -107,7 +116,7 @@ If you're hacking on `@dogsvr/dogsvr` / `cl-tsrpc` / `cl-grpc` / `cfg-luban` alo
 ```sh
 # In each sibling repo: npm link
 # Then, from here:
-npm run linkDog       # npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban
+npm run linkDog       # npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban @dogsvr/logger
 ```
 
 `example-proj-cfg` is consumed via `file:../example-proj-cfg` and does not need `npm link` — the symlink is wired up by `npm install` directly.
@@ -121,16 +130,12 @@ cd <parent>                                        # same parent directory as ex
 git clone https://github.com/dogsvr/example-proj-client.git
 cd example-proj-client
 npm install
-npm run start                                      # parcel serve, opens http://localhost:4567
+npm run start                                      # parcel dev server (default port in package.json)
 ```
 
 Log in through the browser and the game connects to the three servers started above.
 
 If you're also hacking on `@dogsvr/cl-tsrpc` locally, run `npm run linkDog` in the client after `npm install` — it links the client's own copy of `@dogsvr/cl-tsrpc` to the sibling repo. (This is separate from the server-side `linkDog` script above; each consuming repo has its own.)
-
-## Config data
-
-Game tables (rewards, skills, items, …) live in [`example-proj-cfg`](https://github.com/dogsvr/example-proj-cfg) as designer-authored Excel sheets. Building that repo produces an LMDB database plus TypeScript accessors that `worker_thread_config.json` points the server processes at. Its `dist/` is gitignored — a fresh clone has nothing usable until `npm run build` produces it (see [Run](#run) for the order). See the repo's README for the Luban pipeline.
 
 ## Diagrams
 

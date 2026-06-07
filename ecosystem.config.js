@@ -10,6 +10,8 @@
 //   sharing the same pm2 daemon.
 // - cwd is pinned so `pm2 start ecosystem.config.js` works regardless of the
 //   directory the command is invoked from.
+// - time: false disables PM2's stdout timestamp prefix so it doesn't corrupt
+//   the NDJSON lines emitted by @dogsvr/logger.
 const path = require('node:path');
 
 const cwd = __dirname;
@@ -19,6 +21,7 @@ const base = {
     max_restarts: 10,
     min_uptime: '10s',
     kill_timeout: 5000,
+    time: false,
     cwd,
 };
 

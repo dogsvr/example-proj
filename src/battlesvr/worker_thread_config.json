@@ -1,4 +1,6 @@
 {
-    "logLevel": "trace",
+    "log": {
+        "level": "trace"
+    },
     "colyseusPort": 30040
 }

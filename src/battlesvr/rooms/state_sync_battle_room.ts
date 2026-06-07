@@ -6,6 +6,8 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 
+const log = dogsvr.log.child({ module: 'battlesvr/rooms/state_sync_battle_room' });
+
 // Gameplay constants. Player auto-fires every FIRE_INTERVAL opposite to
 // last non-zero movement; bullets are pure physics (bounce off walls,
 // other bullets, owner) and vanish on TTL or on hitting a non-owner
@@ -113,8 +115,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
       Matter.Body.setVelocity(player.body, { x: dx * PLAYER_SPEED, y: dy * PLAYER_SPEED });
 
       if (mag > 0) {
-        // Store unit vector so spawnBall's lastDir * BALL_SPEED is full speed
-        // even when the stick is half-extended.
+        // Store unit vector so spawnBall fires at full speed even when stick is half-extended.
         const inv = 1 / Math.min(mag, 1);
         player.lastDirX = dx * inv;
         player.lastDirY = dy * inv;
@@ -149,9 +150,8 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   }
 
   private registerCollisionHandler() {
-    // collisionStart fires INSIDE Engine.update — enqueue only, drain in
-    // update() after Engine.update returns (mutating mid-step corrupts
-    // the resolver).
+    // collisionStart fires INSIDE Engine.update — enqueue kills, drain after
+    // Engine.update returns (mutating mid-step corrupts the resolver).
     Matter.Events.on(this.engine, 'collisionStart', (event: any) => {
       for (const pair of event.pairs) {
         const pa = pair.bodyA.plugin ?? {};
@@ -205,8 +205,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
       if (player.hasMoved && now >= player.nextFireTs) {
         this.spawnBall(player, sid, now);
-        // Accumulate (not `now + FIRE_INTERVAL`) — keeps cadence steady
-        // under tick jitter; multi-step catch-up is fine.
+        // Accumulate (not `now + FIRE_INTERVAL`) to keep cadence steady under tick jitter.
         player.nextFireTs += FIRE_INTERVAL;
       }
     }
@@ -252,8 +251,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     });
     ball.body.plugin = { ball };
 
-    // Fire along last-non-zero move direction. Owner-self collision is
-    // filtered in collisionStart, so first-frame overlap is harmless.
+    // Fire along last-non-zero move direction.
     Matter.Body.setVelocity(ball.body, {
       x: player.lastDirX * BALL_SPEED,
       y: player.lastDirY * BALL_SPEED,
@@ -283,13 +281,13 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     player.y = y;
     player.state = STATE_INVULN;
     player.invulnUntilTs = now + INVULN_DURATION;
-    // Reset input latch — force re-move before auto-firing resumes.
+    // Force re-move before auto-firing resumes.
     player.hasMoved = false;
     player.lastDirX = 0;
     player.lastDirY = 0;
   }
 
-  /** Lowest-free slot so colours are stable + predictable. */
+  /** Lowest-free slot so colours are stable and predictable. */
   private allocColorSlot(): number {
     for (let i = 0; i < this.colorSlotTaken.length; i++) {
       if (!this.colorSlotTaken[i]) {
@@ -297,8 +295,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
         return i;
       }
     }
-    // Unreachable under maxClients cap; wrap so a join-after-leave race
-    // can't crash the sim.
+    // Unreachable under maxClients cap.
     return 0;
   }
 
@@ -318,7 +315,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     if (!auth) {
       throw new Error("onJoin called without auth payload");
     }
-    dogsvr.infoLog(client.sessionId, auth.gid, auth.openId, auth.zoneId, "joined!");
+    log.info({ sessionId: client.sessionId, gid: auth.gid, openId: auth.openId, zoneId: auth.zoneId }, "joined");
 
     const now = this.engine.timing.timestamp;
     const player = new Player();
@@ -328,8 +325,6 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     player.colorIdx = this.allocColorSlot();
     player.x = Math.random() * (MAP_W - PLAYER_SIZE) + PLAYER_SIZE / 2;
     player.y = Math.random() * (MAP_H - PLAYER_SIZE) + PLAYER_SIZE / 2;
-    // Spawn protection — a stray bullet shouldn't kill before the player
-    // has even seen the map.
     player.state = STATE_INVULN;
     player.invulnUntilTs = now + INVULN_DURATION;
 
@@ -351,14 +346,13 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   // colyseus 0.17: onLeave's 2nd arg is `code?: number` (close code), not
   // `consented: boolean` like 0.16. We don't branch on it.
   onLeave(client: Client, code?: number) {
-    dogsvr.infoLog(client.sessionId, "left!");
+    log.info({ sessionId: client.sessionId }, "left");
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
 
     const scoreChange = player.kills;
 
-    // Fire-and-forget to zonesvr: kills → score → leaderboard update
-    // (forEachCfgRow TbRank in cmd_handler).
+    // Fire-and-forget to zonesvr: kills → score → leaderboard update.
     dogsvr.callCmdByClc("zonesvr", {
       cmdId: cmdId.ZONE_BATTLE_END_NTF,
       openId: player.openId,
@@ -375,6 +369,6 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   }
 
   onDispose() {
-    dogsvr.infoLog("room", this.roomId, "disposing...");
+    log.info({ roomId: this.roomId }, "room disposing");
   }
 }

@@ -1,13 +1,15 @@
 import { MongoClient } from 'mongodb'
-import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
+import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import { RoleBriefInfo } from '../protocols/cmd_proto';
+
+const log = rootLog.child({ module: 'shared/mongo_proxy' });
 
 let client: MongoClient;
 
 export async function initMongo(uri: string) {
     client = new MongoClient(uri);
     await client.connect();
-    dogsvr.infoLog('mongo connected');
+    log.info('mongo connected');
 }
 
 export async function ensureRoleCollIndexes() {

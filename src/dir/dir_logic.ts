@@ -1,13 +1,25 @@
+import { workerData } from 'node:worker_threads';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
+import { setupLoggerInWorker, type WorkerInitPayload } from '@dogsvr/logger/worker_thread';
 import "./cmd_handler";
 import { initMongo } from "../shared/mongo_proxy";
 
 interface DirConfig extends dogsvr.WorkerThreadBaseConfig {
+    log: { level: dogsvr.Level };
     mongoUri: string;
 }
 
 dogsvr.workerReady(async () => {
     dogsvr.loadWorkerThreadConfig();
     const cfg = dogsvr.getThreadConfig<DirConfig>();
+    const loggerInit = (workerData as { loggerInit?: WorkerInitPayload }).loggerInit;
+    if (!loggerInit) {
+        throw new Error('workerData.loggerInit missing — was setupLogger called in main thread?');
+    }
+    setupLoggerInWorker({
+        ...loggerInit,
+        level: cfg.log.level,
+        base: { svrId: 'dir' },
+    });
     await initMongo(cfg.mongoUri);
 });

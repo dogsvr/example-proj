@@ -3,9 +3,11 @@ import * as cmdId from '../protocols/cmd_id';
 import * as cmdProto from '../protocols/cmd_proto';
 import { getMongoClient } from "../shared/mongo_proxy";
 
+const log = dogsvr.log.child({ module: 'dir/cmd_handler' });
+
 dogsvr.regCmdHandler(cmdId.DIR_QUERY_ZONE_LIST, async (reqMsg) => {
     const req: cmdProto.DirQueryZoneListReq = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("DIR_QUERY_ZONE_LIST req:", req);
+    log.debug({ req }, "DIR_QUERY_ZONE_LIST req");
 
     const db = getMongoClient().db("dogsvr-example-proj");
     const collection = db.collection('zone_coll');

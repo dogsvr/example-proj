@@ -8,9 +8,11 @@ import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
 import { now, nowMs } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
 
+const log = dogsvr.log.child({ module: 'zonesvr/cmd_handler' });
+
 dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("ZONE_LOGIN req:", req);
+    log.debug({ req }, "ZONE_LOGIN req");
 
     // `name` is required: the client composes req.openId as `${deviceId}:${name}`,
     // so a missing / blank name here would produce a trailing-colon openId and
@@ -20,11 +22,11 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     }
 
     const lockKey = "rolelock|" + req.openId + "|" + req.zoneId;
-    dogsvr.debugLog("lockKey:", lockKey);
+    log.debug({ lockKey }, "acquiring lock");
     const lock = new DistributedLock(lockKey);
     let lockRes = await lock.lock();
     if (!lockRes) {
-        dogsvr.warnLog("lock failed");
+        log.warn({ lockKey }, "lock failed");
         return;   // silent drop
     }
 
@@ -41,28 +43,28 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
             }
             role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: req.name, score: 0 };
             const insertResult = await collection.insertOne(role);
-            dogsvr.debugLog("register new role:", insertResult);
+            log.debug({ insertResult }, "register new role");
         }
         else {
             role = findResult[0];
             // openId already encodes the name, so same (deviceId, name) → same row; no rewrite.
             // role.score += 1;
             // const updateResult = await collection.updateOne({openId: req.openId, zoneId: req.zoneId}, {$set: {score: role.score}});
-            // dogsvr.debugLog("update role:", updateResult);
+            // log.debug({ updateResult }, "update role");
         }
 
         const res = { role: role };
-        // Stamp gid on res head so cl-tsrpc ApiCommon records conn.dogGid for subsequent requests.
+        // Stamp gid on head so cl-tsrpc records conn.dogGid for subsequent requests.
         return { body: JSON.stringify(res), head: { gid: role.gid } };
     } finally {
         lockRes = await lock.unlock();
-        dogsvr.debugLog("unlockRes:", lockRes);
+        log.debug({ unlockRes: lockRes }, "unlocked");
     }
 })
 
 dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg) => {
     const req: cmdProto.ZoneStartBattleReq = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("ZONE_START_BATTLE req:", req);
+    log.debug({ req }, "ZONE_START_BATTLE req");
 
     let battleRes = await dogsvr.callCmdByClc("battlesvr", {
         cmdId: cmdId.BATTLE_START_BATTLE,
@@ -79,18 +81,18 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg) => {
 
 dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     const req: cmdProto.ZoneBattleEndNtf = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("ZONE_BATTLE_END_NTF:", req);
+    log.debug({ req }, "ZONE_BATTLE_END_NTF");
 
     // No-op when score is unchanged. Empty string keeps the txn-reply contract
     // (see end-of-handler comment).
     if (!req.scoreChange) return '';
 
     const lockKey = "rolelock|" + reqMsg.head.openId + "|" + reqMsg.head.zoneId;
-    dogsvr.debugLog("lockKey:", lockKey);
+    log.debug({ lockKey }, "acquiring lock");
     const lock = new DistributedLock(lockKey);
     let lockRes = await lock.lock();
     if (!lockRes) {
-        dogsvr.warnLog("lock failed");
+        log.warn({ lockKey }, "lock failed");
         return;
     }
 
@@ -98,14 +100,14 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     const collection = db.collection('role_coll');
     const findResult = await collection.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
     if (findResult.length == 0) {
-        dogsvr.errorLog(`role not exist|${reqMsg.head.openId}|${reqMsg.head.zoneId}`);
+        log.error({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, "role not exist");
         return;
     }
 
     const role = findResult[0];
     role.score += req.scoreChange;
     const updateResult = await collection.updateOne({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { $set: { score: role.score } });
-    dogsvr.debugLog("update role:", updateResult);
+    log.debug({ updateResult }, "update role");
 
     dogsvr.pushMsgByCl("tsrpc", [reqMsg.head.gid ?? 0], {
         cmdId: cmdId.ZONE_BATTLE_END_NTF,
@@ -115,10 +117,10 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     }, JSON.stringify({ scoreChange: req.scoreChange, role: role }));
 
     lockRes = await lock.unlock();
-    dogsvr.debugLog("unlockRes:", lockRes);
+    log.debug({ unlockRes: lockRes }, "unlocked");
 
     // Update every configured rank board on battle end.
-    // Extending rank.xlsx with a new row requires no handler code change.
+    // Adding a row to rank.xlsx requires no handler code change.
     const updatePromises: Promise<void>[] = [];
     const updateTs = now();
     const gid = reqMsg.head.gid ?? 0;
@@ -127,26 +129,21 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
         updatePromises.push(util.updateRank(redisKey, gid, role.score, updateTs));
     });
     await Promise.all(updatePromises);
-    // Return an empty body so the worker replies to main_thread. The sender
-    // uses callCmdByClc(..., noResponse=true) which is understood only inside
-    // its own worker — once the message crosses the gRPC wire and reaches the
-    // peer's main_thread, that main_thread always opens a txn in
-    // sendMsgToWorkerThread and waits for a reply (5s TxnMgr default).
-    // Returning undefined here is a silent-drop on our side but manifests as
-    // `txn timeout|txnId:N|timeoutMs:5000` on zonesvr main 5 seconds later.
-    // An empty reply is harmless: the sender discarded the response anyway.
+    // Must return a body even though the caller used noResponse=true.
+    // The gRPC hop from battlesvr → zonesvr main_thread always opens a txn
+    // in sendMsgToWorkerThread; returning undefined causes a txn timeout.
     return '';
 })
 
 dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
     const req: cmdProto.ZoneQueryRankListReq = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("ZONE_QUERY_RANK_LIST req:", req);
+    log.debug({ req }, "ZONE_QUERY_RANK_LIST req");
 
     const rankRow = getCfgRow<RankT>('TbRank', req.rankId);
     if (!rankRow) {
         throw new dogsvr.HandlerError(1003, `rank cfg not found: rankId=${req.rankId}`);
     }
-    // Look up the requester's role to pick the right rank-dimension value (zone/city/province).
+    // Look up the requester's role to pick the right rank-dimension value.
     const db = getMongoClient().db("dogsvr-example-proj");
     const roleColl = db.collection('role_coll');
     const roleFound = await roleColl.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
@@ -177,7 +174,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
 
 dogsvr.regCmdHandler(cmdId.ZONE_HEARTBEAT, async (reqMsg) => {
     const req: cmdProto.ZoneHeartbeatReq = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("ZONE_HEARTBEAT req:", req);
+    log.debug({ req }, "ZONE_HEARTBEAT req");
     const res: cmdProto.ZoneHeartbeatRes = { serverTs: nowMs() };
     return JSON.stringify(res);
 })

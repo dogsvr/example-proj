@@ -17,11 +17,11 @@
     "restart": "pm2 restart ecosystem.config.js",
     "reload": "pm2 reload ecosystem.config.js",
     "delete": "pm2 delete ecosystem.config.js",
-    "logs": "pm2 logs exp-dir exp-zonesvr exp-battlesvr --lines 100",
+    "logs": "pm2 logs --lines 100 --raw | pino-pretty -t \"SYS:yyyy-mm-dd HH:MM:ss.l\" -i hostname",
     "status": "pm2 ls",
     "ops": "node dist/scripts/ops.js",
     "pack": "node dist/scripts/pack.js",
-    "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban"
+    "linkDog": "npm link @dogsvr/dogsvr @dogsvr/cl-tsrpc @dogsvr/cl-grpc @dogsvr/cfg-luban @dogsvr/logger"
   },
   "author": "rowanzhu",
   "license": "MIT",
@@ -30,6 +30,7 @@
     "@dogsvr/cl-grpc": "^0.4.0",
     "@dogsvr/cl-tsrpc": "^0.4.0",
     "@dogsvr/dogsvr": "^0.4.0",
+    "@dogsvr/logger": "^0.4.0",
     "@redis/client": "^5.12.1",
     "colyseus": "^0.17.10",
     "example-proj-cfg": "file:../example-proj-cfg",
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@types/node": "^24.12.2",
     "copyfiles": "^2.4.1",
+    "pino-pretty": "^13.1.3",
     "typescript": "^6.0.3"
   }
 }

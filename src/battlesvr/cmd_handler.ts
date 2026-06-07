@@ -3,9 +3,11 @@ import * as cmdId from '../protocols/cmd_id';
 import * as cmdProto from '../protocols/cmd_proto';
 import { issueTicket } from './session_ticket';
 
+const log = dogsvr.log.child({ module: 'battlesvr/cmd_handler' });
+
 dogsvr.regCmdHandler(cmdId.BATTLE_START_BATTLE, async (reqMsg) => {
     const req: cmdProto.BattleStartBattleReq = JSON.parse(reqMsg.body as string);
-    dogsvr.debugLog("BATTLE_START_BATTLE req:", req);
+    log.debug({ req }, "BATTLE_START_BATTLE req");
 
     // zonesvr forwards head.{openId, zoneId, gid}; reject if any is missing
     // so a stray request can never produce a ticket bound to gid=0 and
