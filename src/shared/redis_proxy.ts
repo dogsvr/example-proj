@@ -3,15 +3,34 @@ import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
 import { RankType, type RankT } from 'example-proj-cfg';
 import type { RoleInfo } from '../protocols/cmd_proto';
+import { timeRedisOp } from './otel_metrics_worker';
 
 const log = rootLog.child({ module: 'shared/redis_proxy' });
 
+let rawClient: ReturnType<typeof createClient>;
 let client: ReturnType<typeof createClient>;
 
+function buildTimedClient(raw: ReturnType<typeof createClient>): ReturnType<typeof createClient> {
+    return new Proxy(raw, {
+        get(target, prop, receiver) {
+            const orig = Reflect.get(target, prop, receiver);
+            if (typeof orig !== 'function' || typeof prop !== 'string') return orig;
+            return (...args: unknown[]) => {
+                const ret = (orig as (...a: unknown[]) => unknown).apply(target, args);
+                if (ret instanceof Promise) {
+                    return timeRedisOp(prop, () => ret as Promise<unknown>);
+                }
+                return ret;
+            };
+        },
+    }) as ReturnType<typeof createClient>;
+}
+
 export async function initRedis(url: string) {
-    client = createClient({ url: url });
-    client.on('error', err => console.log('Redis Client Error', err));
-    await client.connect();
+    rawClient = createClient({ url: url });
+    rawClient.on('error', err => console.log('Redis Client Error', err));
+    await rawClient.connect();
+    client = buildTimedClient(rawClient);
     log.info('redis connected');
 }
 
@@ -108,7 +127,6 @@ export class RankUtil {
     async updateRank(redisKey: string, gid: number, score: number, updateTs: number) {
         const encodedScore = this.encodeScore(score, updateTs);
         const memberKey = String(gid);
-        // zAdd returns "elements newly added" (0 on score-update, both are success).
         await client.zAdd(redisKey, [{ score: encodedScore, value: memberKey }]);
         await client.zRemRangeByRank(redisKey, 0, -1 - this.rankCapacity);
         if (this.expireTs > 0) {
@@ -134,7 +152,6 @@ export class RankUtil {
         if (stop_idx > 0) {
             stop_idx -= 1;
         }
-        // zRangeWithScores returns empty array when key doesn't exist; real failures reject.
         const res = await client.zRangeWithScores(redisKey, offset, stop_idx, { REV: true });
         let rankList: Array<{ gid: number, score: number, updateTs: number }> = [];
         for (let i = 0; i < res.length; i++) {
@@ -157,12 +174,9 @@ export class RankUtil {
             return 0;
         }
         if (this.tsAccuracyType == RankTsAccuracyType.LOW) {
-            // Floor to integer: (baseTs - updateTs) may not be divisible by LOW_ACCU_TS_LOST.
-            // Quantizing is also the business intent of LOW accuracy (30s bucket).
             updateTs = Math.floor((this.baseTs - updateTs) / RankUtil.LOW_ACCU_TS_LOST);
         }
         else {
-            // HIGH mode: floor defensively so non-integer inputs don't leak fractional bits.
             updateTs = Math.floor(this.baseTs + RankUtil.HIGH_ACCU_TS_OFFSET - updateTs);
         }
         if (updateTs > RankUtil.MAX_TS_VALUE || updateTs < 0) {
@@ -172,7 +186,7 @@ export class RankUtil {
         if (this.rankOrder == RankOrderType.ASC) {
             score = RankUtil.MAX_SCORE_VALUE - score;
         }
-        // Arithmetic pack: (score * 2^25) + ts. Result ≤ 2^53 - 1, safe as JS Number and Redis zset score.
+        // Arithmetic pack: (score * 2^25) + ts. Fits 53-bit safe integer.
         return score * RankUtil.TS_SHIFT + updateTs;
     }
     private decodeScore(encodedScore: number): { score: number, updateTs: number } {
@@ -199,12 +213,7 @@ export type RankKeyBuilder = (row: RankT, role: RoleInfo) => string;
 
 /**
  * Default key scheme: `rank|{row.id}|{type-tag}[|{dimension}]`
- *   - RankType_AllZone:  `rank|{id}|allzone`
- *   - RankType_Zone:     `rank|{id}|zone|{role.zoneId ?? 0}`
- *   - RankType_City:     `rank|{id}|city|{role.cityId ?? 0}`
- *   - RankType_Province: `rank|{id}|province|{role.provinceId ?? 0}`
- *
- * Throws on unknown RankType so cfg drift surfaces loudly.
+ * Throws on unknown RankType.
  */
 export const defaultRankKeyBuilder: RankKeyBuilder = (row, role) => {
     const prefix = `rank|${row.id}`;

@@ -1,14 +1,9 @@
 import * as dogsvr from '@dogsvr/dogsvr/main_thread';
-import { setupLogger, type SetupOptions } from '@dogsvr/logger/main_thread';
+import { setupLogger } from '@dogsvr/logger/main_thread';
 import '@dogsvr/cl-grpc';
-
-interface BattleSvrMainConfig extends dogsvr.MainThreadJsonConfig {
-    log: SetupOptions;
-}
+import { buildLoggerOptions, setupOtelMain } from '../shared/otel';
 
 const cfg = dogsvr.loadMainThreadConfig(__dirname + '/main_thread_config.json');
-setupLogger({
-    ...dogsvr.getMainThreadConfig<BattleSvrMainConfig>().log,
-    base: { svrId: 'battlesvr' },
-});
+setupLogger(buildLoggerOptions('battlesvr'));
+setupOtelMain('battlesvr');
 dogsvr.startServer(cfg);

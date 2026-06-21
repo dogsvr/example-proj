@@ -2,23 +2,18 @@ import { Room, Client, ServerError } from "colyseus";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
+import {
+    observeTickDuration, incRoomCount, decRoomCount,
+    incRoomClients, decRoomClients, recordBroadcast,
+} from '../../shared/otel_metrics_worker';
 
 const log = dogsvr.log.child({ module: 'battlesvr/rooms/lockstep_sync_battle_room' });
 
-// Lockstep battle room. Gameplay rules match state-sync (shooting, self-
-// ball bounce, enemy-ball kill, respawn with invuln, kill tally), but all
-// physics / game logic runs on the CLIENT. Server responsibilities:
-//   1. generate seed and send to each joining client
-//   2. broadcast action frames at 20 fps
-//   3. relay player input
-//   4. inject join/leave actions
-//   5. collect `reportKills` from the client so onLeave can emit
-//      ZONE_BATTLE_END_NTF with the real kill count
-//
-// Late joiners receive the history of closed frames and fast-forward
-// locally; combined with the deterministic client sim this rebuilds the
-// current world state. A spawn-position snapshot alone would miss
-// in-flight bullets / kill counts / invuln timers that happened since.
+const ROOM_TYPE = 'lockstep_sync';
+
+// Lockstep battle room: seed + frame broadcast at 20fps + input relay.
+// Server collects reportKills for ZONE_BATTLE_END_NTF on leave.
+// Late joiners receive historicalFrames for client-side fast-forward.
 const MAP_W = 800;
 const MAP_H = 1200;
 const PLAYER_SIZE = 20;
@@ -38,21 +33,19 @@ export class LockstepSyncBattleRoom extends Room {
   private seed: number = 0;
   private frameArray: Frame[] = [];
   private currFrameId: number = 0;
-  // Colour-slot pool: same scheme as state-sync for cross-client stability.
   private colorSlotTaken: boolean[] = new Array(MAX_PLAYERS).fill(false);
-  // Colyseus 0.17 doesn't pass auth to onLeave, so we cache it here;
-  // finalKills arrives via `reportKills` just before leave.
+  // Colyseus 0.17 doesn't pass auth to onLeave; cache auth + finalKills here.
   private authBySid: Map<string, TicketPayload> = new Map();
   private colorIdxBySid: Map<string, number> = new Map();
   private finalKills: Map<string, number> = new Map();
 
   onCreate(options: any) {
-    // 32-bit unsigned seed feeds the client's mulberry32 PRNG for any
-    // draw that must stay lockstep-consistent (respawn position).
     this.seed = (Math.random() * 0xFFFFFFFF) >>> 0;
 
     this.frameArray.push(new Frame(0));
     this.setSimulationInterval((_dt) => this.frameTick(), FRAME_INTERVAL);
+    incRoomCount(ROOM_TYPE);
+    incRoomCount(ROOM_TYPE);
 
     this.onMessage("submitAction", (client, action: { vkey: string; args: any[] }) => {
       if (!action || typeof action.vkey !== 'string') return;
@@ -60,7 +53,6 @@ export class LockstepSyncBattleRoom extends Room {
     });
 
     this.onMessage("reportKills", (client, n: number) => {
-      // Trust the client (demo). Last value wins.
       if (typeof n === 'number' && Number.isFinite(n) && n >= 0) {
         this.finalKills.set(client.sessionId, Math.floor(n));
       }
@@ -68,11 +60,14 @@ export class LockstepSyncBattleRoom extends Room {
   }
 
   private frameTick() {
+    const start = process.hrtime.bigint();
     // Broadcast the closed frame, open a fresh one.
     const closed = this.frameArray[this.frameArray.length - 1];
     this.broadcast("broadcastFrame", closed);
+    recordBroadcast(ROOM_TYPE);
     this.currFrameId++;
     this.frameArray.push(new Frame(this.currFrameId));
+    observeTickDuration(ROOM_TYPE, Number(process.hrtime.bigint() - start) / 1e6);
   }
 
   private addAction(action: Action) {
@@ -109,14 +104,10 @@ export class LockstepSyncBattleRoom extends Room {
     this.authBySid.set(client.sessionId, auth);
     this.colorIdxBySid.set(client.sessionId, colorIdx);
 
-    // Non-deterministic Math.random is fine — the join action carries the
-    // resolved spawn position so clients don't re-roll it.
     const spawnX = Math.random() * (MAP_W - PLAYER_SIZE) + PLAYER_SIZE / 2;
     const spawnY = Math.random() * (MAP_H - PLAYER_SIZE) + PLAYER_SIZE / 2;
 
-    // Capture history BEFORE adding our join — the join lands in the
-    // currently-open frame, which the newcomer receives via broadcastFrame
-    // (not historicalFrames), avoiding a double-create of self.
+    // Capture history before adding our join action so late-joiners don't double-create self.
     const historicalFrames = this.frameArray.slice(0, -1);
 
     this.addAction({
@@ -125,7 +116,6 @@ export class LockstepSyncBattleRoom extends Room {
       args: [client.sessionId, auth.gid, colorIdx, spawnX, spawnY],
     });
 
-    // Init packet with history so the client can fast-forward to the current world state.
     client.send(0, {
       seed: this.seed,
       selfSessionId: client.sessionId,
@@ -133,10 +123,10 @@ export class LockstepSyncBattleRoom extends Room {
       mapHeight: MAP_H,
       historicalFrames,
     });
+    incRoomClients(ROOM_TYPE);
   }
 
-  // colyseus 0.17: onLeave's 2nd arg is `code?: number` (close code), not
-  // `consented: boolean` like 0.16. We don't branch on it.
+  // colyseus 0.17: onLeave's 2nd arg is close code, not consented bool.
   onLeave(client: Client, code?: number) {
     log.info({ sessionId: client.sessionId }, "left");
     const sid = client.sessionId;
@@ -157,9 +147,11 @@ export class LockstepSyncBattleRoom extends Room {
     this.authBySid.delete(sid);
     this.colorIdxBySid.delete(sid);
     this.finalKills.delete(sid);
+    decRoomClients(ROOM_TYPE);
   }
 
   onDispose() {
     log.info({ roomId: this.roomId }, "room disposing");
+    decRoomCount(ROOM_TYPE);
   }
 }

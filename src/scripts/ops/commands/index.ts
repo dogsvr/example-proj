@@ -1,14 +1,7 @@
 /**
- * Registry of every ops command. Adding a new one is:
- *   1. drop a file under commands/ exporting `const fooBar: OpsCommand`
- *   2. add one import + one entry to the `commands` array below
- *
- * The dispatcher (ops.ts) just walks this array by `name`. No other wiring
- * is required — no plugin loader, no config, no `require()` scan. A plain
- * array keeps tree-shaking obvious and lets TS flag typos immediately.
- *
- * Ordering here controls the order shown by `help`. Keep it grouped by
- * resource (zone → role → rank → lock → gid-counter → stats → raw → help).
+ * Registry of ops commands. To add a new command:
+ *   1. Export an OpsCommand from a file under commands/
+ *   2. Import it here and add to the array below
  */
 
 import type { OpsCommand } from '../command';
@@ -17,6 +10,7 @@ import { zoneList, zoneAdd, zoneRemove } from './zone';
 import { roleList, roleGet, roleRemove } from './role';
 import { rankList, rankTop, rankClear, rankClearAll } from './rank';
 import { rankFill, rankUnfill } from './rank_fill';
+import { stressFill, stressUnfill } from './stress_fill';
 import { lockList, lockRelease } from './lock';
 import { gidCounterPeek } from './gid_counter';
 import { stats } from './stats';
@@ -29,6 +23,7 @@ export const commands: OpsCommand[] = [
     roleList, roleGet, roleRemove,
     rankList, rankTop, rankClear, rankClearAll,
     rankFill, rankUnfill,
+    stressFill, stressUnfill,
     lockList, lockRelease,
     gidCounterPeek,
     stats,

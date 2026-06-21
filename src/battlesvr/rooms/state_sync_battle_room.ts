@@ -5,13 +5,16 @@ import * as Matter from "matter-js";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import * as cmdId from '../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
+import {
+    observeTickDuration, incRoomCount, decRoomCount,
+    incRoomClients, decRoomClients,
+} from '../../shared/otel_metrics_worker';
 
 const log = dogsvr.log.child({ module: 'battlesvr/rooms/state_sync_battle_room' });
 
-// Gameplay constants. Player auto-fires every FIRE_INTERVAL opposite to
-// last non-zero movement; bullets are pure physics (bounce off walls,
-// other bullets, owner) and vanish on TTL or on hitting a non-owner
-// player, which also kills that player and respawns with invuln.
+const ROOM_TYPE = 'state_sync';
+
+// Gameplay: auto-fire bullets, bounce off walls, kill non-owner players, respawn with invuln.
 const MAP_W = 800;
 const MAP_H = 1200;
 const PLAYER_SIZE = 20;
@@ -33,14 +36,11 @@ const CAT_BALL = 0x0004;
 const STATE_ALIVE = 0;
 const STATE_INVULN = 1;
 
-// Schema field declaration order matters: Colyseus 0.17 applies patches
-// field-by-field in declaration order and fires `listen` callbacks inline.
-// `state` is declared first so the client's state→invuln-ring logic fires
-// before `x/y` updates, letting the explosion play at the death position
-// before the body teleports to the respawn point.
+// `state` declared first: Colyseus 0.17 fires `listen` callbacks in declaration order;
+// client's state→invuln-ring logic fires before x/y, so explosion plays at death position.
 class Player extends Schema {
-  @type("uint8")  state: number = STATE_INVULN;  // declared first on purpose
-  @type("uint8")  colorIdx: number = 0;          // 0..MAX_PLAYERS-1, stable for the lifetime of the session
+  @type("uint8")  state: number = STATE_INVULN;  // declared first — see class comment
+  @type("uint8")  colorIdx: number = 0;
   @type("uint16") kills: number = 0;
   @type("uint16") deaths: number = 0;
   @type("number") gid: number = 0;
@@ -51,11 +51,10 @@ class Player extends Schema {
   openId: string = "";
   zoneId: number = 0;
   body: Matter.Body | null = null;
-  // Unit vector of last non-zero move; bullets fire at lastDir * BALL_SPEED.
   lastDirX: number = 0;
   lastDirY: number = 0;
-  hasMoved: boolean = false;       // gate firing until first input
-  invulnUntilTs: number = 0;       // engine.timing.timestamp (ms, sim clock)
+  hasMoved: boolean = false;
+  invulnUntilTs: number = 0;
   nextFireTs: number = 0;
 }
 
@@ -76,19 +75,14 @@ class RoomState extends Schema {
   @type([Ball]) balls = new ArraySchema<Ball>();
 }
 
-// Kill event buffered out of the Matter mid-step so we can safely mutate
-// the world from the outer tick loop.
+// Kill event buffered out of the Matter mid-step to avoid mutating world mid-step.
 type PendingKill = { victim: Player; owner: Player; ball: Ball };
 
 export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   engine: Matter.Engine;
   maxClients = MAX_PLAYERS;
   private pendingKills: PendingKill[] = [];
-  // body.plugin side-channel so collisionStart can look up the owner/victim
-  // without a MapSchema reverse-lookup.
   private sessionIdByPlayer: Map<Player, string> = new Map();
-  // Lowest-free-slot allocation so (at steady state) colours match join
-  // order and every client sees the same colour for the same player.
   private colorSlotTaken: boolean[] = new Array(MAX_PLAYERS).fill(false);
 
   onCreate(options: any) {
@@ -98,24 +92,21 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
     this.initPhysics();
     this.registerCollisionHandler();
-    this.setSimulationInterval((deltaTime) => this.update(deltaTime));
+    this.setSimulationInterval((deltaTime) => this.tickWithMetrics(deltaTime));
+    incRoomCount(ROOM_TYPE);
 
     this.onMessage(0, (client, input) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.body) return;
 
-      // Client sends a normalized 2D vector (magnitude ≤ 1). Clamp + re-normalize
-      // defensively so a malformed payload can't exceed PLAYER_SPEED.
       let dx = Math.max(-1, Math.min(1, typeof input?.dx === 'number' ? input.dx : 0));
       let dy = Math.max(-1, Math.min(1, typeof input?.dy === 'number' ? input.dy : 0));
       const mag = Math.hypot(dx, dy);
       if (mag > 1) { dx /= mag; dy /= mag; }
 
-      // setVelocity (not setPosition) so bullets still collide elastically.
       Matter.Body.setVelocity(player.body, { x: dx * PLAYER_SPEED, y: dy * PLAYER_SPEED });
 
       if (mag > 0) {
-        // Store unit vector so spawnBall fires at full speed even when stick is half-extended.
         const inv = 1 / Math.min(mag, 1);
         player.lastDirX = dx * inv;
         player.lastDirY = dy * inv;
@@ -131,7 +122,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     this.engine = Matter.Engine.create();
     this.engine.gravity.y = 0;
 
-    // Walls: thick slabs outside the play area so fast bullets can't tunnel.
+    // Walls: thick slabs outside play area to prevent bullet tunneling.
     const wallThick = 1000;
     const wallOpts = {
       isStatic: true,
@@ -150,8 +141,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
   }
 
   private registerCollisionHandler() {
-    // collisionStart fires INSIDE Engine.update — enqueue kills, drain after
-    // Engine.update returns (mutating mid-step corrupts the resolver).
+    // collisionStart fires inside Engine.update — enqueue kills, drain after update.
     Matter.Events.on(this.engine, 'collisionStart', (event: any) => {
       for (const pair of event.pairs) {
         const pa = pair.bodyA.plugin ?? {};
@@ -160,9 +150,9 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
         let ball: Ball | null = null, player: Player | null = null;
         if (pa.ball && pb.player) { ball = pa.ball; player = pb.player; }
         else if (pb.ball && pa.player) { ball = pb.ball; player = pa.player; }
-        else continue; // wall↔ball, ball↔ball, wall↔player: pure physics
+        else continue; // wall↔ball, ball↔ball, wall↔player
 
-        // Self-bounce / invuln / orphan: bounce, no kill.
+        // Self-bounce / invuln / orphan: skip.
         const owner = this.state.players.get(ball!.ownerSessionId);
         if (owner === player) continue;
         if (player!.state === STATE_INVULN) continue;
@@ -173,12 +163,17 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     });
   }
 
+  private tickWithMetrics(deltaTime: number) {
+    const start = process.hrtime.bigint();
+    this.update(deltaTime);
+    observeTickDuration(ROOM_TYPE, Number(process.hrtime.bigint() - start) / 1e6);
+  }
+
   private update(deltaTime: number) {
     Matter.Engine.update(this.engine, deltaTime);
     const now = this.engine.timing.timestamp;
 
-    // 1. Drain kills queued during Engine.update. De-dup by victim + ball
-    //    so a double-touch in the same tick doesn't double-count.
+    // 1. Drain kills queued during Engine.update; de-dup by victim+ball.
     if (this.pendingKills.length > 0) {
       const killedBalls = new Set<Ball>();
       const killedVictims = new Set<Player>();
@@ -205,7 +200,7 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
       if (player.hasMoved && now >= player.nextFireTs) {
         this.spawnBall(player, sid, now);
-        // Accumulate (not `now + FIRE_INTERVAL`) to keep cadence steady under tick jitter.
+        // Accumulate to keep cadence steady under tick jitter.
         player.nextFireTs += FIRE_INTERVAL;
       }
     }
@@ -251,7 +246,6 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     });
     ball.body.plugin = { ball };
 
-    // Fire along last-non-zero move direction.
     Matter.Body.setVelocity(ball.body, {
       x: player.lastDirX * BALL_SPEED,
       y: player.lastDirY * BALL_SPEED,
@@ -281,13 +275,11 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
     player.y = y;
     player.state = STATE_INVULN;
     player.invulnUntilTs = now + INVULN_DURATION;
-    // Force re-move before auto-firing resumes.
     player.hasMoved = false;
     player.lastDirX = 0;
     player.lastDirY = 0;
   }
 
-  /** Lowest-free slot so colours are stable and predictable. */
   private allocColorSlot(): number {
     for (let i = 0; i < this.colorSlotTaken.length; i++) {
       if (!this.colorSlotTaken[i]) {
@@ -295,7 +287,6 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
         return i;
       }
     }
-    // Unreachable under maxClients cap.
     return 0;
   }
 
@@ -341,18 +332,18 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
     this.sessionIdByPlayer.set(player, client.sessionId);
     this.state.players.set(client.sessionId, player);
+    incRoomClients(ROOM_TYPE);
   }
 
-  // colyseus 0.17: onLeave's 2nd arg is `code?: number` (close code), not
-  // `consented: boolean` like 0.16. We don't branch on it.
+  // colyseus 0.17: onLeave's 2nd arg is close code, not consented bool.
   onLeave(client: Client, code?: number) {
     log.info({ sessionId: client.sessionId }, "left");
     const player = this.state.players.get(client.sessionId);
     if (!player) return;
+    decRoomClients(ROOM_TYPE);
 
     const scoreChange = player.kills;
 
-    // Fire-and-forget to zonesvr: kills → score → leaderboard update.
     dogsvr.callCmdByClc("zonesvr", {
       cmdId: cmdId.ZONE_BATTLE_END_NTF,
       openId: player.openId,
@@ -370,5 +361,6 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
   onDispose() {
     log.info({ roomId: this.roomId }, "room disposing");
+    decRoomCount(ROOM_TYPE);
   }
 }

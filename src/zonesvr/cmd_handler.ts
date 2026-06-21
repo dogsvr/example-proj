@@ -4,7 +4,7 @@ import * as cmdProto from '../protocols/cmd_proto';
 import { DistributedLock, RankUtil } from "../shared/redis_proxy";
 import { getCfgRow, forEachCfgRow } from '@dogsvr/cfg-luban';
 import type { RankT } from 'example-proj-cfg';
-import { getMongoClient, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
+import { timedColl, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
 import { now, nowMs } from "../shared/time_util";
 import { generateGid } from "../shared/gid_util";
 
@@ -14,9 +14,6 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(reqMsg.body as string);
     log.debug({ req }, "ZONE_LOGIN req");
 
-    // `name` is required: the client composes req.openId as `${deviceId}:${name}`,
-    // so a missing / blank name here would produce a trailing-colon openId and
-    // a role doc with empty display name. Fail fast instead.
     if (typeof req.name !== 'string' || !req.name.trim()) {
         throw new dogsvr.HandlerError(1005, 'invalid name');
     }
@@ -31,8 +28,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     }
 
     try {
-        const db = getMongoClient().db("dogsvr-example-proj");
-        const collection = db.collection('role_coll');
+        const collection = timedColl('role_coll');
         const findResult = await collection.find({ openId: req.openId, zoneId: req.zoneId }, { projection: { _id: 0 } }).toArray();
         let role = null;
         if (findResult.length == 0) {
@@ -47,14 +43,9 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
         }
         else {
             role = findResult[0];
-            // openId already encodes the name, so same (deviceId, name) → same row; no rewrite.
-            // role.score += 1;
-            // const updateResult = await collection.updateOne({openId: req.openId, zoneId: req.zoneId}, {$set: {score: role.score}});
-            // log.debug({ updateResult }, "update role");
         }
 
         const res = { role: role };
-        // Stamp gid on head so cl-tsrpc records conn.dogGid for subsequent requests.
         return { body: JSON.stringify(res), head: { gid: role.gid } };
     } finally {
         lockRes = await lock.unlock();
@@ -83,8 +74,6 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     const req: cmdProto.ZoneBattleEndNtf = JSON.parse(reqMsg.body as string);
     log.debug({ req }, "ZONE_BATTLE_END_NTF");
 
-    // No-op when score is unchanged. Empty string keeps the txn-reply contract
-    // (see end-of-handler comment).
     if (!req.scoreChange) return '';
 
     const lockKey = "rolelock|" + reqMsg.head.openId + "|" + reqMsg.head.zoneId;
@@ -96,8 +85,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
         return;
     }
 
-    const db = getMongoClient().db("dogsvr-example-proj");
-    const collection = db.collection('role_coll');
+    const collection = timedColl('role_coll');
     const findResult = await collection.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
     if (findResult.length == 0) {
         log.error({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, "role not exist");
@@ -129,9 +117,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
         updatePromises.push(util.updateRank(redisKey, gid, role.score, updateTs));
     });
     await Promise.all(updatePromises);
-    // Must return a body even though the caller used noResponse=true.
-    // The gRPC hop from battlesvr → zonesvr main_thread always opens a txn
-    // in sendMsgToWorkerThread; returning undefined causes a txn timeout.
+    // Must return a body: the gRPC hop always opens a txn; returning undefined causes a timeout.
     return '';
 })
 
@@ -143,9 +129,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
     if (!rankRow) {
         throw new dogsvr.HandlerError(1003, `rank cfg not found: rankId=${req.rankId}`);
     }
-    // Look up the requester's role to pick the right rank-dimension value.
-    const db = getMongoClient().db("dogsvr-example-proj");
-    const roleColl = db.collection('role_coll');
+    const roleColl = timedColl('role_coll');
     const roleFound = await roleColl.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
     if (roleFound.length == 0) {
         throw new dogsvr.HandlerError(1004, `role not found: openId=${reqMsg.head.openId} zoneId=${reqMsg.head.zoneId}`);

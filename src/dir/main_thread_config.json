@@ -8,5 +8,23 @@
     },
     "cl": {
         "tsrpc": { "type": "tsrpc", "svrType": "http", "port": 10000 }
+    },
+    "otel": {
+        "metrics": {
+            "enabled": true,
+            "sampleIntervalMs": 1000,
+            "port": 9101,
+            "cmdDuration": true,
+            "txnPending": true,
+            "workerPending": true,
+            "samplingRate": 1.0
+        },
+        "traces": {
+            "enabled": true,
+            "endpoint": "http://localhost:4318/v1/traces"
+        },
+        "logs": {
+            "enabled": false
+        }
     }
 }

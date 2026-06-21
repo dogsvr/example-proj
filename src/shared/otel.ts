@@ -1,0 +1,78 @@
+// Business-side wiring for the three otel signals (metrics, traces, logs).
+
+import * as dogsvr from '@dogsvr/dogsvr/main_thread';
+import * as dogsvrWorker from '@dogsvr/dogsvr/worker_thread';
+import { type SetupOptions } from '@dogsvr/logger/main_thread';
+import { threadId } from 'node:worker_threads';
+import { setupOtelMetrics, shutdownOtelMetrics } from './otel_metrics';
+import { setupOtelTracingMain, setupOtelTracingWorker, shutdownOtelTracing } from './otel_tracing';
+import { initWorkerMetrics, shutdownWorkerMetrics } from './otel_metrics_worker';
+import { DEFAULT_OTLP_TRACES_ENDPOINT, DEFAULT_OTLP_LOGS_ENDPOINT } from './otel_defaults';
+import type { OtelConfigExt, WorkerOtelConfigExt } from './otel_config';
+
+interface MainCfgWithOtel extends dogsvr.MainThreadJsonConfig {
+    log: SetupOptions;
+    otel?: OtelConfigExt;
+}
+
+interface WorkerCfgWithOtel extends dogsvrWorker.WorkerThreadBaseConfig {
+    log: { level: dogsvr.Level };
+    otel?: WorkerOtelConfigExt;
+}
+
+/** Produce SetupOptions from main-thread config. No side effects. */
+export function buildLoggerOptions(svr: string): SetupOptions {
+    const raw = dogsvr.getMainThreadConfig<MainCfgWithOtel>();
+    const logsCfg = raw.otel?.logs;
+    const base: SetupOptions = { ...raw.log, base: { svrId: svr } };
+    if (logsCfg?.enabled) {
+        const endpoint = logsCfg.endpoint
+            ?? process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+            ?? DEFAULT_OTLP_LOGS_ENDPOINT;
+        return { ...base, otel: { otlpEndpoint: endpoint, serviceName: svr } };
+    }
+    return base;
+}
+
+/** Wire main-thread metrics + traces from cfg.otel. */
+export function setupOtelMain(svr: string): void {
+    const raw = dogsvr.getMainThreadConfig<MainCfgWithOtel>();
+    const otel = raw.otel;
+    if (otel?.traces?.enabled) {
+        const endpoint = otel.traces.endpoint
+            ?? process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+            ?? DEFAULT_OTLP_TRACES_ENDPOINT;
+        setupOtelTracingMain({ serviceName: svr, otlpEndpoint: endpoint, samplingRate: otel.traces.samplingRate });
+        dogsvr.onShutdown(shutdownOtelTracing);
+    }
+    if (otel?.metrics?.enabled) {
+        dogsvr.setMetricSink(setupOtelMetrics({
+            svr,
+            metricsConfig: otel.metrics,
+            port: otel.metrics.port ?? 9101,
+        }));
+        dogsvr.onShutdown(shutdownOtelMetrics);
+    }
+}
+
+/** Wire worker-thread metrics + traces from cfg.otel. */
+export function setupOtelWorker(svr: string): void {
+    const cfg = dogsvrWorker.getThreadConfig<WorkerCfgWithOtel>();
+    const otel = cfg.otel;
+    if (otel?.traces?.enabled) {
+        const endpoint = otel.traces.endpoint
+            ?? process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+            ?? DEFAULT_OTLP_TRACES_ENDPOINT;
+        setupOtelTracingWorker({ serviceName: `${svr}-worker`, otlpEndpoint: endpoint, samplingRate: otel.traces.samplingRate });
+        dogsvrWorker.onShutdown(shutdownOtelTracing);
+    }
+    if (otel?.metrics?.enabled) {
+        const portBase = otel.metrics.portBase ?? 9111;
+        initWorkerMetrics({
+            ...otel.metrics,
+            port: portBase + threadId,
+            serviceName: `${svr}-worker`,
+        });
+        dogsvrWorker.onShutdown(shutdownWorkerMetrics);
+    }
+}

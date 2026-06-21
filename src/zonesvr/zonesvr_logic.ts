@@ -7,13 +7,14 @@ import { initMongo, ensureRoleCollIndexes } from "../shared/mongo_proxy";
 import { openCfgDb } from '@dogsvr/cfg-luban';
 import * as cfgModule from 'example-proj-cfg';
 import * as path from 'node:path';
+import { setupOtelWorker } from '../shared/otel';
 
 interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: dogsvr.Level };
     mongoUri: string;
     redisUri: string;
-    cfgDbPath: string;      // relative to __dirname (dist/zonesvr/) or absolute
-    tableKeysPath: string;  // relative to __dirname or absolute
+    cfgDbPath: string;
+    tableKeysPath: string;
 }
 
 dogsvr.workerReady(async () => {
@@ -28,7 +29,7 @@ dogsvr.workerReady(async () => {
         level: cfg.log.level,
         base: { svrId: 'zonesvr' },
     });
-    // Open cfg DB before async init: handlers may call getCfgRow at any moment.
+    setupOtelWorker('zonesvr');
     openCfgDb({
         dbPath: path.resolve(__dirname, cfg.cfgDbPath),
         tableKeysPath: path.resolve(__dirname, cfg.tableKeysPath),

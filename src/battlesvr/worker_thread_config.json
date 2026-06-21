@@ -2,5 +2,25 @@
     "log": {
         "level": "trace"
     },
-    "colyseusPort": 30040
+    "colyseusPort": 30040,
+    "otel": {
+        "metrics": {
+            "enabled": true,
+            "portBase": 9131,
+            "mongo": { "enabled": false },
+            "redis": { "enabled": false },
+            "colyseus": {
+                "tickDuration": true,
+                "roomCount": true,
+                "roomClients": true,
+                "broadcastBytes": false,
+                "broadcastCount": true
+            },
+            "logEvents": true
+        },
+        "traces": {
+            "enabled": true,
+            "endpoint": "http://localhost:4318/v1/traces"
+        }
+    }
 }

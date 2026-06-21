@@ -11,5 +11,24 @@
     },
     "clc": {
         "zonesvr": { "type": "grpc", "address": "127.0.0.1:20001" }
+    },
+    "otel": {
+        "metrics": {
+            "enabled": true,
+            "sampleIntervalMs": 1000,
+            "port": 9103,
+            "cmdDuration": true,
+            "txnPending": true,
+            "workerPending": true,
+            "samplingRate": 1.0
+        },
+        "traces": {
+            "enabled": true,
+            "endpoint": "http://localhost:4318/v1/traces"
+        },
+        "logs": {
+            "enabled": true,
+            "endpoint": "http://localhost:4318/v1/logs"
+        }
     }
 }

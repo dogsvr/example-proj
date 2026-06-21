@@ -5,5 +5,25 @@
     "mongoUri": "mongodb://127.0.0.1:27017",
     "redisUri": "redis://127.0.0.1:6379",
     "cfgDbPath": "../../../example-proj-cfg/dist/db",
-    "tableKeysPath": "../../../example-proj-cfg/dist/table_keys.json"
+    "tableKeysPath": "../../../example-proj-cfg/dist/table_keys.json",
+    "otel": {
+        "metrics": {
+            "enabled": true,
+            "portBase": 9121,
+            "mongo": { "enabled": true, "samplingRate": 1.0 },
+            "redis": { "enabled": true, "samplingRate": 1.0 },
+            "colyseus": {
+                "tickDuration": false,
+                "roomCount": false,
+                "roomClients": false,
+                "broadcastBytes": false,
+                "broadcastCount": false
+            },
+            "logEvents": true
+        },
+        "traces": {
+            "enabled": true,
+            "endpoint": "http://localhost:4318/v1/traces"
+        }
+    }
 }
