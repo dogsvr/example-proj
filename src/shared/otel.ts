@@ -3,11 +3,14 @@
 import * as dogsvr from '@dogsvr/dogsvr/main_thread';
 import * as dogsvrWorker from '@dogsvr/dogsvr/worker_thread';
 import { type SetupOptions } from '@dogsvr/logger/main_thread';
-import { threadId } from 'node:worker_threads';
 import { setupOtelMetrics, shutdownOtelMetrics } from './otel_metrics';
 import { setupOtelTracingMain, setupOtelTracingWorker, shutdownOtelTracing } from './otel_tracing';
 import { initWorkerMetrics, shutdownWorkerMetrics } from './otel_metrics_worker';
-import { DEFAULT_OTLP_TRACES_ENDPOINT, DEFAULT_OTLP_LOGS_ENDPOINT } from './otel_defaults';
+import {
+    DEFAULT_OTLP_TRACES_ENDPOINT,
+    DEFAULT_OTLP_LOGS_ENDPOINT,
+    DEFAULT_OTLP_METRICS_ENDPOINT,
+} from './otel_defaults';
 import type { OtelConfigExt, WorkerOtelConfigExt } from './otel_config';
 
 interface MainCfgWithOtel extends dogsvr.MainThreadJsonConfig {
@@ -46,10 +49,13 @@ export function setupOtelMain(svr: string): void {
         dogsvr.onShutdown(shutdownOtelTracing);
     }
     if (otel?.metrics?.enabled) {
+        const endpoint = otel.metrics.endpoint
+            ?? process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            ?? DEFAULT_OTLP_METRICS_ENDPOINT;
         dogsvr.setMetricSink(setupOtelMetrics({
             svr,
             metricsConfig: otel.metrics,
-            port: otel.metrics.port ?? 9101,
+            otlpEndpoint: endpoint,
         }));
         dogsvr.onShutdown(shutdownOtelMetrics);
     }
@@ -67,10 +73,12 @@ export function setupOtelWorker(svr: string): void {
         dogsvrWorker.onShutdown(shutdownOtelTracing);
     }
     if (otel?.metrics?.enabled) {
-        const portBase = otel.metrics.portBase ?? 9111;
+        const endpoint = otel.metrics.endpoint
+            ?? process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+            ?? DEFAULT_OTLP_METRICS_ENDPOINT;
         initWorkerMetrics({
             ...otel.metrics,
-            port: portBase + threadId,
+            otlpEndpoint: endpoint,
             serviceName: `${svr}-worker`,
         });
         dogsvrWorker.onShutdown(shutdownWorkerMetrics);

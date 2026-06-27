@@ -16,7 +16,6 @@
         "metrics": {
             "enabled": true,
             "sampleIntervalMs": 1000,
-            "port": 9103,
             "cmdDuration": true,
             "txnPending": true,
             "workerPending": true,

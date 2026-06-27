@@ -6,7 +6,6 @@
     "otel": {
         "metrics": {
             "enabled": true,
-            "portBase": 9131,
             "mongo": { "enabled": false },
             "redis": { "enabled": false },
             "colyseus": {

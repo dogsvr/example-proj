@@ -1,14 +1,13 @@
-// Worker-thread metrics for example-proj via OpenTelemetry SDK + PrometheusExporter.
+// Worker-thread metrics for example-proj via OpenTelemetry SDK + OTLP HTTP push.
 
 import { metrics, type Counter, type Histogram, type UpDownCounter } from '@opentelemetry/api';
-import { MeterProvider, AggregationType } from '@opentelemetry/sdk-metrics';
-import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
+import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS } from './otel_defaults';
+import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './otel_defaults';
 
 export interface WorkerMetricsCfg {
     enabled: boolean;
-    port?: number;
     serviceName?: string;
     mongo?: { enabled: boolean; samplingRate?: number };
     redis?: { enabled: boolean; samplingRate?: number };
@@ -20,6 +19,10 @@ export interface WorkerMetricsCfg {
         broadcastCount?: boolean;
     };
     logEvents?: boolean;
+}
+
+interface WorkerMetricsInit extends WorkerMetricsCfg {
+    otlpEndpoint?: string;
 }
 
 let cfg: WorkerMetricsCfg = { enabled: false };
@@ -37,31 +40,28 @@ let broadcastMsgsTotal: Counter | null = null;
 let logEventsTotal: Counter | null = null;
 
 /** Initialize worker metrics. Idempotent. Call once from worker entry. */
-export function initWorkerMetrics(input: WorkerMetricsCfg): void {
+export function initWorkerMetrics(input: WorkerMetricsInit): void {
     cfg = input;
     if (!cfg.enabled) return;
 
-    const exporter = new PrometheusExporter({
-        host: '127.0.0.1',
-        port: cfg.port ?? 0,
-        endpoint: '/metrics',
-        appendTimestamp: false,
+    const exporter = new OTLPMetricExporter({
+        url: input.otlpEndpoint ?? DEFAULT_OTLP_METRICS_ENDPOINT,
     });
 
     meterProvider = new MeterProvider({
         resource: resourceFromAttributes({ 'service.name': cfg.serviceName ?? 'unknown-worker' }),
-        readers: [exporter],
+        readers: [new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 5000 })],
         views: [
             {
-                instrumentName: 'mongo_op_duration_ms',
+                instrumentName: 'mongo_op_duration',
                 aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: DURATION_BUCKETS_MS } },
             },
             {
-                instrumentName: 'redis_op_duration_ms',
+                instrumentName: 'redis_op_duration',
                 aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: DURATION_BUCKETS_MS } },
             },
             {
-                instrumentName: 'colyseus_tick_duration_ms',
+                instrumentName: 'colyseus_tick_duration',
                 aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: TICK_BUCKETS_MS } },
             },
         ],
@@ -69,14 +69,14 @@ export function initWorkerMetrics(input: WorkerMetricsCfg): void {
     metrics.setGlobalMeterProvider(meterProvider);
 
     const meter = metrics.getMeter('@dogsvr/example-proj-worker');
-    mongoOpDuration       = meter.createHistogram('mongo_op_duration_ms', { description: 'MongoDB op latency.', unit: 'ms' });
+    mongoOpDuration       = meter.createHistogram('mongo_op_duration', { description: 'MongoDB op latency.', unit: 'ms' });
     mongoOpErrorTotal     = meter.createCounter('mongo_op_error_total',   { description: 'MongoDB op errors.' });
-    redisOpDuration       = meter.createHistogram('redis_op_duration_ms', { description: 'Redis op latency.', unit: 'ms' });
+    redisOpDuration       = meter.createHistogram('redis_op_duration', { description: 'Redis op latency.', unit: 'ms' });
     redisOpErrorTotal     = meter.createCounter('redis_op_error_total',   { description: 'Redis op errors.' });
-    tickDuration          = meter.createHistogram('colyseus_tick_duration_ms', { description: 'Single tick processing time.', unit: 'ms' });
+    tickDuration          = meter.createHistogram('colyseus_tick_duration', { description: 'Single tick processing time.', unit: 'ms' });
     roomCount             = meter.createUpDownCounter('colyseus_room_count',   { description: 'Active Colyseus rooms.' });
     roomClients           = meter.createUpDownCounter('colyseus_room_clients', { description: 'Connected clients across rooms of a type.' });
-    broadcastBytesTotal   = meter.createCounter('colyseus_broadcast_bytes_total', { description: 'Total broadcast bytes.', unit: 'By' });
+    broadcastBytesTotal   = meter.createCounter('colyseus_broadcast', { description: 'Total broadcast bytes.', unit: 'By' });
     broadcastMsgsTotal    = meter.createCounter('colyseus_broadcast_msgs_total',  { description: 'Total broadcast messages.' });
     logEventsTotal        = meter.createCounter('log_events_total',        { description: 'Log events by level.' });
 }

@@ -4,8 +4,8 @@ import type { MetricsConfig, TraceConfig, LogConfig } from '@dogsvr/dogsvr/main_
 import type { WorkerMetricsCfg } from './otel_metrics_worker';
 
 export interface MetricsConfigExt extends MetricsConfig {
-    /** PrometheusExporter port for the main-thread MeterProvider. */
-    port?: number;
+    /** OTLP/HTTP endpoint. Falls back to OTEL_EXPORTER_OTLP_METRICS_ENDPOINT then DEFAULT_OTLP_METRICS_ENDPOINT. */
+    endpoint?: string;
     cmdDuration?: boolean;
     txnPending?: boolean;
     workerPending?: boolean;
@@ -32,6 +32,6 @@ export interface OtelConfigExt {
 
 /** Worker has no logs sub-block; logger init flows through workerData.loggerInit. */
 export interface WorkerOtelConfigExt {
-    metrics?: WorkerMetricsCfg & { portBase?: number };
+    metrics?: WorkerMetricsCfg & { endpoint?: string };
     traces?:  TraceConfigExt;
 }

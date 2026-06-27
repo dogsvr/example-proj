@@ -1,22 +1,22 @@
-// Main-thread metrics for example-proj via OpenTelemetry SDK + PrometheusExporter.
+// Main-thread metrics for example-proj via OpenTelemetry SDK + OTLP HTTP push.
 
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
 import { metrics } from '@opentelemetry/api';
-import { MeterProvider, AggregationType } from '@opentelemetry/sdk-metrics';
-import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
+import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { MetricSink } from '@dogsvr/dogsvr/main_thread';
 import type { MetricsConfigExt } from './otel_config';
-import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS } from './otel_defaults';
+import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './otel_defaults';
 
 const METRIC_NAMES = {
-    cmdDuration:        'dogsvr_cmd_duration_ms',
+    cmdDuration:        'dogsvr_cmd_duration',
     txnPending:         'dogsvr_txn_pending',
     txnTimeoutTotal:    'dogsvr_txn_timeout_total',
     workerPending:      'dogsvr_worker_pending',
-    tickDuration:       'colyseus_tick_duration_ms',
-    redisOpDuration:    'redis_op_duration_ms',
-    mongoOpDuration:    'mongo_op_duration_ms',
+    tickDuration:       'colyseus_tick_duration',
+    redisOpDuration:    'redis_op_duration',
+    mongoOpDuration:    'mongo_op_duration',
 } as const;
 
 let meterProvider: MeterProvider | null = null;
@@ -25,26 +25,22 @@ let eventLoopHist: IntervalHistogram | null = null;
 export interface OtelMetricsOptions {
     svr: string;
     metricsConfig: MetricsConfigExt;
-    port: number;
-    host?: string;
+    otlpEndpoint?: string;
 }
 
-/** Init MeterProvider + PrometheusExporter + process/nodejs gauges. Returns MetricSink for dogsvr. */
+/** Init MeterProvider + OTLP HTTP push exporter + process/nodejs gauges. Returns MetricSink for dogsvr. */
 export function setupOtelMetrics(opts: OtelMetricsOptions): MetricSink {
     if (meterProvider) {
         throw new Error('setupOtelMetrics already called');
     }
 
-    const exporter = new PrometheusExporter({
-        host: opts.host ?? '127.0.0.1',
-        port: opts.port,
-        endpoint: '/metrics',
-        appendTimestamp: false,
+    const exporter = new OTLPMetricExporter({
+        url: opts.otlpEndpoint ?? DEFAULT_OTLP_METRICS_ENDPOINT,
     });
 
     meterProvider = new MeterProvider({
         resource: resourceFromAttributes({ 'service.name': opts.svr }),
-        readers: [exporter],
+        readers: [new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 5000 })],
         views: [
             {
                 instrumentName: METRIC_NAMES.cmdDuration,
@@ -66,44 +62,45 @@ export function setupOtelMetrics(opts: OtelMetricsOptions): MetricSink {
     });
     metrics.setGlobalMeterProvider(meterProvider);
 
-    registerDefaultMetrics();
+    registerDefaultMetrics(opts.svr);
 
     return createMetricSink(opts.svr, opts.metricsConfig);
 }
 
-function registerDefaultMetrics(): void {
+function registerDefaultMetrics(svr: string): void {
     const meter = metrics.getMeter('@dogsvr/example-proj');
+    const attrs = { svr, role: 'main' };
 
-    meter.createObservableCounter('process_cpu_seconds_total', {
+    meter.createObservableCounter('process_cpu_time', {
         description: 'CPU time consumed by the process (user+system).',
         unit: 's',
     }).addCallback((result) => {
         const u = process.cpuUsage();
-        result.observe((u.user + u.system) / 1e6);
+        result.observe((u.user + u.system) / 1e6, attrs);
     });
 
-    meter.createObservableGauge('process_resident_memory_bytes', {
+    meter.createObservableGauge('process_resident_memory', {
         description: 'Resident memory size of the process.',
         unit: 'By',
     }).addCallback((result) => {
-        result.observe(process.memoryUsage().rss);
+        result.observe(process.memoryUsage().rss, attrs);
     });
 
-    meter.createObservableGauge('process_heap_bytes', {
+    meter.createObservableGauge('process_heap', {
         description: 'Used heap size.',
         unit: 'By',
     }).addCallback((result) => {
-        result.observe(process.memoryUsage().heapUsed);
+        result.observe(process.memoryUsage().heapUsed, attrs);
     });
 
     eventLoopHist = monitorEventLoopDelay({ resolution: 10 });
     eventLoopHist.enable();
-    meter.createObservableGauge('nodejs_eventloop_lag_seconds', {
+    meter.createObservableGauge('nodejs_eventloop_lag', {
         description: 'Event loop lag (mean over the sampling window).',
         unit: 's',
     }).addCallback((result) => {
         if (!eventLoopHist) return;
-        result.observe(eventLoopHist.mean / 1e9);
+        result.observe(eventLoopHist.mean / 1e9, attrs);
     });
 }
 
