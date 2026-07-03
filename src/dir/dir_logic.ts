@@ -1,12 +1,12 @@
 import { workerData } from 'node:worker_threads';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import { setupLoggerInWorker, type WorkerInitPayload } from '@dogsvr/logger/worker_thread';
+import { setupLoggerInWorker, type WorkerInitPayload, type Level } from '@dogsvr/logger/worker_thread';
 import "./cmd_handler";
 import { initMongo } from "../shared/mongo_proxy";
 import { setupOtelWorker } from '../shared/otel';
 
 interface DirConfig extends dogsvr.WorkerThreadBaseConfig {
-    log: { level: dogsvr.Level };
+    log: { level: Level };
     mongoUri: string;
 }
 

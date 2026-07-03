@@ -2,7 +2,7 @@
 
 import * as dogsvr from '@dogsvr/dogsvr/main_thread';
 import * as dogsvrWorker from '@dogsvr/dogsvr/worker_thread';
-import { type SetupOptions } from '@dogsvr/logger/main_thread';
+import { type SetupOptions, type OtelLogsOptions, type Level } from '@dogsvr/logger/main_thread';
 import { setupOtelMetrics, shutdownOtelMetrics } from './otel_metrics';
 import { setupOtelTracingMain, setupOtelTracingWorker, shutdownOtelTracing } from './otel_tracing';
 import { initWorkerMetrics, shutdownWorkerMetrics } from './otel_metrics_worker';
@@ -19,22 +19,29 @@ interface MainCfgWithOtel extends dogsvr.MainThreadJsonConfig {
 }
 
 interface WorkerCfgWithOtel extends dogsvrWorker.WorkerThreadBaseConfig {
-    log: { level: dogsvr.Level };
+    log: { level: Level };
     otel?: WorkerOtelConfigExt;
 }
 
 /** Produce SetupOptions from main-thread config. No side effects. */
 export function buildLoggerOptions(svr: string): SetupOptions {
     const raw = dogsvr.getMainThreadConfig<MainCfgWithOtel>();
-    const logsCfg = raw.otel?.logs;
-    const base: SetupOptions = { ...raw.log, base: { svrId: svr } };
-    if (logsCfg?.enabled) {
-        const endpoint = logsCfg.endpoint
-            ?? process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
-            ?? DEFAULT_OTLP_LOGS_ENDPOINT;
-        return { ...base, otel: { otlpEndpoint: endpoint, serviceName: svr } };
-    }
-    return base;
+    const otelLogsCfg = raw.otel?.logs;
+    const otel: OtelLogsOptions | undefined = otelLogsCfg?.enabled
+        ? {
+            enabled: true,
+            otlpEndpoint: otelLogsCfg.endpoint
+                ?? process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+                ?? DEFAULT_OTLP_LOGS_ENDPOINT,
+            serviceName: svr,
+            level: otelLogsCfg.level,
+        }
+        : undefined;
+    return {
+        ...raw.log,
+        base: { svrId: svr },
+        otel,
+    };
 }
 
 /** Wire main-thread metrics + traces from cfg.otel. */

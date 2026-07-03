@@ -27,7 +27,8 @@
         },
         "logs": {
             "enabled": true,
-            "endpoint": "http://localhost:4318/v1/logs"
+            "endpoint": "http://localhost:4318/v1/logs",
+            "level": "trace"
         }
     }
 }

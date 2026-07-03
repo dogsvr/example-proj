@@ -1,6 +1,6 @@
 import { workerData } from 'node:worker_threads';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import { setupLoggerInWorker, type WorkerInitPayload } from '@dogsvr/logger/worker_thread';
+import { setupLoggerInWorker, type WorkerInitPayload, type Level } from '@dogsvr/logger/worker_thread';
 // @ts-expect-error
 import express from "express";
 import { createServer } from "http";
@@ -12,7 +12,7 @@ import "./cmd_handler";
 import { setupOtelWorker } from '../shared/otel';
 
 interface BattleSvrConfig extends dogsvr.WorkerThreadBaseConfig {
-    log: { level: dogsvr.Level };
+    log: { level: Level };
     colyseusPort: number;
 }
 

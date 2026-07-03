@@ -7,7 +7,7 @@
         "mode": "central"
     },
     "cl": {
-        "tsrpc": { "type": "tsrpc", "svrType": "ws", "port": 20000 },
+        "tsrpc": { "type": "tsrpc", "svrType": "ws", "port": 20000, "log": { "level": "debug", "body": true } },
         "grpc": { "type": "grpc", "port": 20001 }
     },
     "clc": {
@@ -28,7 +28,8 @@
         },
         "logs": {
             "enabled": true,
-            "endpoint": "http://localhost:4318/v1/logs"
+            "endpoint": "http://localhost:4318/v1/logs",
+            "level": "trace"
         }
     }
 }

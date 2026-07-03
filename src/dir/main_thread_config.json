@@ -7,7 +7,7 @@
         "mode": "inline"
     },
     "cl": {
-        "tsrpc": { "type": "tsrpc", "svrType": "http", "port": 10000 }
+        "tsrpc": { "type": "tsrpc", "svrType": "http", "port": 10000, "log": { "level": "debug", "body": true } }
     },
     "otel": {
         "metrics": {
@@ -23,7 +23,8 @@
             "endpoint": "http://localhost:4318/v1/traces"
         },
         "logs": {
-            "enabled": false
+            "enabled": false,
+            "level": "trace"
         }
     }
 }

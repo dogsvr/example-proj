@@ -1,6 +1,7 @@
 // Business-side OTel config schema — extends framework-side OtelConfig with OTLP details.
 
 import type { MetricsConfig, TraceConfig, LogConfig } from '@dogsvr/dogsvr/main_thread';
+import type { Level } from '@dogsvr/logger/main_thread';
 import type { WorkerMetricsCfg } from './otel_metrics_worker';
 
 export interface MetricsConfigExt extends MetricsConfig {
@@ -22,6 +23,8 @@ export interface TraceConfigExt extends TraceConfig {
 export interface LogConfigExt extends LogConfig {
     /** OTLP/HTTP endpoint. Falls back to OTEL_EXPORTER_OTLP_LOGS_ENDPOINT then DEFAULT_OTLP_LOGS_ENDPOINT. */
     endpoint?: string;
+    /** OTLP-sink minimum level. Independent of cfg.log.level. Defaults to cfg.log.level. */
+    level?: Level;
 }
 
 export interface OtelConfigExt {

@@ -1,6 +1,6 @@
 import { workerData } from 'node:worker_threads';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import { setupLoggerInWorker, type WorkerInitPayload } from '@dogsvr/logger/worker_thread';
+import { setupLoggerInWorker, type WorkerInitPayload, type Level } from '@dogsvr/logger/worker_thread';
 import "./cmd_handler";
 import { initRedis } from "../shared/redis_proxy";
 import { initMongo, ensureRoleCollIndexes } from "../shared/mongo_proxy";
@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import { setupOtelWorker } from '../shared/otel';
 
 interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {
-    log: { level: dogsvr.Level };
+    log: { level: Level };
     mongoUri: string;
     redisUri: string;
     cfgDbPath: string;
@@ -33,7 +33,8 @@ dogsvr.workerReady(async () => {
     openCfgDb({
         dbPath: path.resolve(__dirname, cfg.cfgDbPath),
         tableKeysPath: path.resolve(__dirname, cfg.tableKeysPath),
-        cfgModule
+        cfgModule,
+        logger: dogsvr.log.child({ module: 'cfg-luban' }),
     });
     await Promise.all([
         initRedis(cfg.redisUri),
