@@ -1,13 +1,11 @@
-// Main-thread metrics for example-proj via OpenTelemetry SDK + OTLP HTTP push.
-
 import { monitorEventLoopDelay, type IntervalHistogram } from 'node:perf_hooks';
 import { metrics } from '@opentelemetry/api';
 import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { MetricSink } from '@dogsvr/dogsvr/main_thread';
-import type { MetricsConfigExt } from './otel_config';
-import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './otel_defaults';
+import type { MetricsConfigExt } from './config';
+import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './defaults';
 
 const METRIC_NAMES = {
     cmdDuration:        'dogsvr_cmd_duration',
@@ -28,7 +26,6 @@ export interface OtelMetricsOptions {
     otlpEndpoint?: string;
 }
 
-/** Init MeterProvider + OTLP HTTP push exporter + process/nodejs gauges. Returns MetricSink for dogsvr. */
 export function setupOtelMetrics(opts: OtelMetricsOptions): MetricSink {
     if (meterProvider) {
         throw new Error('setupOtelMetrics already called');

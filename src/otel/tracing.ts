@@ -1,16 +1,10 @@
-// SpanSink bridge to OpenTelemetry NodeTracerProvider for example-proj.
-
 import { context, propagation, trace, type Context, type Span, type SpanContext, SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { NodeTracerProvider, BatchSpanProcessor, ParentBasedSampler, TraceIdRatioBasedSampler, AlwaysOnSampler } from '@opentelemetry/sdk-trace-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
-import {
-    setSpanSink as setMainSpanSink,
-    type SpanSink, type SpanCtx, type SpanHandle,
-} from '@dogsvr/dogsvr/main_thread';
-import { setSpanSink as setWorkerSpanSink } from '@dogsvr/dogsvr/worker_thread';
+import type { SpanSink, SpanCtx, SpanHandle } from '@dogsvr/dogsvr/main_thread';
 
 const TRACER_NAME = '@dogsvr/example-proj';
 
@@ -121,6 +115,17 @@ function buildSink(): SpanSink {
             if (!span) return null;
             return wrap(span);
         },
+        getCurrentContext() {
+            const span = trace.getActiveSpan();
+            if (!span) return null;
+            const sc = span.spanContext();
+            return {
+                traceId: sc.traceId,
+                spanId: sc.spanId,
+                traceFlags: sc.traceFlags,
+                traceState: sc.traceState?.serialize(),
+            };
+        },
         withActive(span, fn) {
             const sc: SpanContext = {
                 traceId: span.context().traceId,
@@ -145,12 +150,11 @@ function commonSetup(opts: OtelTracingOptions): SpanSink {
     return buildSink();
 }
 
-export function setupOtelTracingMain(opts: OtelTracingOptions): void {
-    setMainSpanSink(commonSetup(opts));
-}
-
-export function setupOtelTracingWorker(opts: OtelTracingOptions): void {
-    setWorkerSpanSink(commonSetup(opts));
+export function setupOtelTracing(
+    opts: OtelTracingOptions,
+    setSpanSink: (sink: SpanSink) => void,
+): void {
+    setSpanSink(commonSetup(opts));
 }
 
 export async function shutdownOtelTracing(): Promise<void> {

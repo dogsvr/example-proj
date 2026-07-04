@@ -1,7 +1,7 @@
 import { MongoClient, Collection, Document } from 'mongodb'
 import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import { RoleBriefInfo } from '../protocols/cmd_proto';
-import { timeMongoOp } from './otel_metrics_worker';
+import { timeMongoOp } from '../otel/metrics_worker';
 
 const log = rootLog.child({ module: 'shared/mongo_proxy' });
 

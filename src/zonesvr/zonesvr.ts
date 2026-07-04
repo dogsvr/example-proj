@@ -3,7 +3,7 @@ import { setupLogger } from '@dogsvr/logger/main_thread';
 import '@dogsvr/cl-tsrpc';
 import '@dogsvr/cl-grpc';
 import { TsrpcCL } from '@dogsvr/cl-tsrpc';
-import { buildLoggerOptions, setupOtelMain } from '../shared/otel';
+import { buildLoggerOptions, setupOtelMain } from '../otel/main';
 
 const cfg = dogsvr.loadMainThreadConfig(__dirname + '/main_thread_config.json');
 setupLogger(buildLoggerOptions('zonesvr'));

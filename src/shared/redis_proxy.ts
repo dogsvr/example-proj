@@ -3,7 +3,7 @@ import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import * as crypto from "node:crypto";
 import { RankType, type RankT } from 'example-proj-cfg';
 import type { RoleInfo } from '../protocols/cmd_proto';
-import { timeRedisOp } from './otel_metrics_worker';
+import { timeRedisOp } from '../otel/metrics_worker';
 
 const log = rootLog.child({ module: 'shared/redis_proxy' });
 

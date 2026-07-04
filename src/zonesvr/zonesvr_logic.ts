@@ -7,7 +7,7 @@ import { initMongo, ensureRoleCollIndexes } from "../shared/mongo_proxy";
 import { openCfgDb } from '@dogsvr/cfg-luban';
 import * as cfgModule from 'example-proj-cfg';
 import * as path from 'node:path';
-import { setupOtelWorker } from '../shared/otel';
+import { setupOtelWorker } from '../otel/worker';
 
 interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };

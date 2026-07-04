@@ -2,7 +2,7 @@
 
 import type { MetricsConfig, TraceConfig, LogConfig } from '@dogsvr/dogsvr/main_thread';
 import type { Level } from '@dogsvr/logger/main_thread';
-import type { WorkerMetricsCfg } from './otel_metrics_worker';
+import type { WorkerMetricsCfg } from './metrics_worker';
 
 export interface MetricsConfigExt extends MetricsConfig {
     /** OTLP/HTTP endpoint. Falls back to OTEL_EXPORTER_OTLP_METRICS_ENDPOINT then DEFAULT_OTLP_METRICS_ENDPOINT. */

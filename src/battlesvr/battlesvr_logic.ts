@@ -9,7 +9,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { StateSyncBattleRoom } from "./rooms/state_sync_battle_room";
 import { LockstepSyncBattleRoom } from "./rooms/lockstep_sync_battle_room";
 import "./cmd_handler";
-import { setupOtelWorker } from '../shared/otel';
+import { setupOtelWorker } from '../otel/worker';
 
 interface BattleSvrConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };

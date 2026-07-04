@@ -3,7 +3,7 @@ import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import { setupLoggerInWorker, type WorkerInitPayload, type Level } from '@dogsvr/logger/worker_thread';
 import "./cmd_handler";
 import { initMongo } from "../shared/mongo_proxy";
-import { setupOtelWorker } from '../shared/otel';
+import { setupOtelWorker } from '../otel/worker';
 
 interface DirConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };

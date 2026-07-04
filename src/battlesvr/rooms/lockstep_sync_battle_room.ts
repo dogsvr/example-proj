@@ -5,7 +5,7 @@ import { consumeTicket, TicketPayload } from '../session_ticket';
 import {
     observeTickDuration, incRoomCount, decRoomCount,
     incRoomClients, decRoomClients, recordBroadcast,
-} from '../../shared/otel_metrics_worker';
+} from '../../otel/metrics_worker';
 
 const log = dogsvr.log.child({ module: 'battlesvr/rooms/lockstep_sync_battle_room' });
 
