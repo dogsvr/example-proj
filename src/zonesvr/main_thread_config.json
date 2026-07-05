@@ -3,11 +3,11 @@
     "workerThreadNum": 2,
     "workerConfigPath": "./worker_thread_config.json",
     "log": {
-        "level": "trace",
+        "level": "info",
         "mode": "central"
     },
     "cl": {
-        "tsrpc": { "type": "tsrpc", "svrType": "ws", "port": 20000, "log": { "level": "debug", "body": true } },
+        "tsrpc": { "type": "tsrpc", "svrType": "ws", "port": 20000, "log": { "level": "error", "body": false } },
         "grpc": { "type": "grpc", "port": 20001 }
     },
     "clc": {
@@ -20,16 +20,17 @@
             "cmdDuration": true,
             "txnPending": true,
             "workerPending": true,
-            "samplingRate": 1.0
+            "samplingRate": 1.0,
+            "threadStats": { "enabled": true }
         },
         "traces": {
-            "enabled": true,
+            "enabled": false,
             "endpoint": "http://localhost:4318/v1/traces"
         },
         "logs": {
-            "enabled": true,
+            "enabled": false,
             "endpoint": "http://localhost:4318/v1/logs",
-            "level": "trace"
+            "level": "info"
         }
     }
 }

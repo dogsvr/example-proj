@@ -15,7 +15,9 @@
                 "broadcastBytes": false,
                 "broadcastCount": false
             },
-            "logEvents": true
+            "logEvents": true,
+            "threadStats": { "heap": true, "elu": true, "gc": true },
+            "cmdHdl": true
         },
         "traces": {
             "enabled": true,

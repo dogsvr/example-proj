@@ -16,7 +16,8 @@
             "cmdDuration": true,
             "txnPending": true,
             "workerPending": true,
-            "samplingRate": 1.0
+            "samplingRate": 1.0,
+            "threadStats": { "enabled": true }
         },
         "traces": {
             "enabled": true,

@@ -1,6 +1,6 @@
 {
     "log": {
-        "level": "trace"
+        "level": "info"
     },
     "mongoUri": "mongodb://127.0.0.1:27017",
     "redisUri": "redis://127.0.0.1:6379",
@@ -18,10 +18,12 @@
                 "broadcastBytes": false,
                 "broadcastCount": false
             },
-            "logEvents": true
+            "logEvents": true,
+            "threadStats": { "heap": true, "elu": true, "gc": true },
+            "cmdHdl": true
         },
         "traces": {
-            "enabled": true,
+            "enabled": false,
             "endpoint": "http://localhost:4318/v1/traces"
         }
     }

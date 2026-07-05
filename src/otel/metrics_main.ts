@@ -3,18 +3,29 @@ import { metrics } from '@opentelemetry/api';
 import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import type { MetricSink } from '@dogsvr/dogsvr/main_thread';
+import {
+    getLatestThreadStatsSnapshot,
+    getTxnPendingCount,
+    getWorkerPendingCounts,
+    type MetricSink,
+} from '@dogsvr/dogsvr/main_thread';
 import type { MetricsConfigExt } from './config';
 import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './defaults';
 
 const METRIC_NAMES = {
-    cmdDuration:        'dogsvr_cmd_duration',
-    txnPending:         'dogsvr_txn_pending',
-    txnTimeoutTotal:    'dogsvr_txn_timeout_total',
-    workerPending:      'dogsvr_worker_pending',
-    tickDuration:       'colyseus_tick_duration',
-    redisOpDuration:    'redis_op_duration',
-    mongoOpDuration:    'mongo_op_duration',
+    cmdDuration:            'dogsvr_cmd_duration',
+    txnPending:             'dogsvr_txn_pending',
+    txnTimeoutTotal:        'dogsvr_txn_timeout_total',
+    workerPending:          'dogsvr_worker_pending',
+    tickDuration:           'colyseus_tick_duration',
+    redisOpDuration:        'redis_op_duration',
+    mongoOpDuration:        'mongo_op_duration',
+    threadCpuTime:          'dogsvr_thread_cpu_time_seconds_total',
+    threadCpuWait:          'dogsvr_thread_cpu_wait_seconds_total',
+    threadCpuUtilization:   'dogsvr_thread_cpu_utilization',
+    processThreadCount:     'dogsvr_process_thread_count',
+    processRssBytes:        'dogsvr_process_rss_bytes',
+    processVszBytes:        'dogsvr_process_vsz_bytes',
 } as const;
 
 let meterProvider: MeterProvider | null = null;
@@ -60,6 +71,8 @@ export function setupOtelMetrics(opts: OtelMetricsOptions): MetricSink {
     metrics.setGlobalMeterProvider(meterProvider);
 
     registerDefaultMetrics(opts.svr);
+    registerPendingMetrics(opts.svr, opts.metricsConfig);
+    registerThreadStatsMetrics(opts.svr, opts.metricsConfig);
 
     return createMetricSink(opts.svr, opts.metricsConfig);
 }
@@ -77,7 +90,7 @@ function registerDefaultMetrics(svr: string): void {
     });
 
     meter.createObservableGauge('process_resident_memory', {
-        description: 'Resident memory size of the process.',
+        description: 'Resident memory size of the process (legacy name; see also dogsvr_process_rss_bytes).',
         unit: 'By',
     }).addCallback((result) => {
         result.observe(process.memoryUsage().rss, attrs);
@@ -101,8 +114,77 @@ function registerDefaultMetrics(svr: string): void {
     });
 }
 
+function registerPendingMetrics(svr: string, cfg: MetricsConfigExt): void {
+    const meter = metrics.getMeter('@dogsvr/example-proj');
+
+    if (cfg.txnPending) {
+        meter.createObservableGauge(METRIC_NAMES.txnPending, {
+            description: 'Pending transactions in TxnMgr.',
+        }).addCallback((r) => r.observe(getTxnPendingCount(), { svr }));
+    }
+
+    if (cfg.workerPending) {
+        meter.createObservableGauge(METRIC_NAMES.workerPending, {
+            description: 'In-flight requests per worker thread.',
+        }).addCallback((r) => {
+            const perWorker = getWorkerPendingCounts();
+            for (let i = 0; i < perWorker.length; i++) {
+                r.observe(perWorker[i], { svr, worker_index: i });
+            }
+        });
+    }
+}
+
+function registerThreadStatsMetrics(svr: string, cfg: MetricsConfigExt): void {
+    if (!cfg.threadStats?.enabled) return;
+    const meter = metrics.getMeter('@dogsvr/example-proj');
+
+    const cpuTime = meter.createObservableCounter(METRIC_NAMES.threadCpuTime, {
+        description: 'Cumulative CPU run time per thread.',
+        unit: 's',
+    });
+    const cpuWait = meter.createObservableCounter(METRIC_NAMES.threadCpuWait, {
+        description: 'Cumulative CPU runqueue-wait time per thread.',
+        unit: 's',
+    });
+    const cpuUtil = meter.createObservableGauge(METRIC_NAMES.threadCpuUtilization, {
+        description: 'Per-thread CPU utilization (Δrun / Δwall); 1.0 = one core saturated.',
+    });
+    const threadCount = meter.createObservableUpDownCounter(METRIC_NAMES.processThreadCount, {
+        description: 'Total OS-level thread count for the process.',
+    });
+    const rssGauge = meter.createObservableGauge(METRIC_NAMES.processRssBytes, {
+        description: 'Resident set size of the process.',
+        unit: 'By',
+    });
+    const vszGauge = meter.createObservableGauge(METRIC_NAMES.processVszBytes, {
+        description: 'Virtual memory size of the process.',
+        unit: 'By',
+    });
+
+    meter.addBatchObservableCallback((observer) => {
+        const snap = getLatestThreadStatsSnapshot();
+        if (!snap) return;
+        for (const s of snap.samples) {
+            const attrs: Record<string, string | number> = {
+                svr,
+                thread_role: s.role,
+                tid: s.osTid,
+            };
+            if (s.workerIndex !== null) attrs.worker_index = s.workerIndex;
+            if (s.nodeThreadId !== null) attrs.node_thread_id = s.nodeThreadId;
+            observer.observe(cpuTime, s.cpuTimeSec, attrs);
+            if (s.cpuWaitSec !== undefined) observer.observe(cpuWait, s.cpuWaitSec, attrs);
+            if (s.cpuUtilization !== null) observer.observe(cpuUtil, s.cpuUtilization, attrs);
+        }
+        observer.observe(threadCount, snap.process.threadCount, { svr });
+        observer.observe(rssGauge, snap.process.rssBytes, { svr });
+        observer.observe(vszGauge, snap.process.vszBytes, { svr });
+    }, [cpuTime, cpuWait, cpuUtil, threadCount, rssGauge, vszGauge]);
+}
+
 interface InFlightCmd {
-    cmdId: string;
+    cmdId: number;
     startNs: bigint;
 }
 
@@ -112,45 +194,29 @@ function createMetricSink(svr: string, cfg: MetricsConfigExt): MetricSink {
         description: 'Time from main-thread dispatch to worker reply.',
         unit: 'ms',
     });
-    const txnPending = meter.createGauge(METRIC_NAMES.txnPending, {
-        description: 'Pending transactions in TxnMgr (sampled).',
-    });
     const txnTimeoutTotal = meter.createCounter(METRIC_NAMES.txnTimeoutTotal, {
         description: 'Total transaction timeouts.',
-    });
-    const workerPending = meter.createGauge(METRIC_NAMES.workerPending, {
-        description: 'In-flight requests per worker thread (sampled).',
     });
 
     const inFlight = new Map<number, InFlightCmd>();
     const sampleRate = cfg.samplingRate ?? 1.0;
 
     return {
-        onCmdStart(txnId: number, cmdId: string, _workerIndex: number): void {
+        onCmdStart(txnId: number, cmdId: number): void {
             if (!cfg.cmdDuration) return;
             if (sampleRate < 1.0 && Math.random() >= sampleRate) return;
             inFlight.set(txnId, { cmdId, startNs: process.hrtime.bigint() });
         },
-        onCmdEnd(txnId: number, _workerIndex: number, ok: boolean): void {
+        onCmdEnd(txnId: number, ok: boolean): void {
             const ctx = inFlight.get(txnId);
             if (!ctx) return;
             inFlight.delete(txnId);
             const ms = Number(process.hrtime.bigint() - ctx.startNs) / 1e6;
-            cmdDuration.record(ms, { svr, cmdId: ctx.cmdId, ok: ok ? '1' : '0' });
+            cmdDuration.record(ms, { svr, cmdId: String(ctx.cmdId), ok: ok ? '1' : '0' });
         },
-        onTxnTimeout(txnId: number, _workerIndex: number): void {
+        onTxnTimeout(txnId: number): void {
             inFlight.delete(txnId);
             txnTimeoutTotal.add(1, { svr });
-        },
-        observeTxnPending(count: number): void {
-            if (!cfg.txnPending) return;
-            txnPending.record(count, { svr });
-        },
-        observeWorkerPending(perWorker: readonly number[]): void {
-            if (!cfg.workerPending) return;
-            for (let i = 0; i < perWorker.length; i++) {
-                workerPending.record(perWorker[i], { svr, worker: String(i) });
-            }
         },
     };
 }
