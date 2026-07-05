@@ -5,20 +5,20 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import type { SpanSink, SpanCtx, SpanHandle } from '@dogsvr/dogsvr/main_thread';
+import type { TraceConfigExt } from './config';
 
 const TRACER_NAME = '@dogsvr/example-proj';
 
 let tracerProvider: NodeTracerProvider | null = null;
 
-export interface OtelTracingOptions {
+export interface OtelTracingOptions extends TraceConfigExt {
     serviceName: string;
-    otlpEndpoint: string;
-    samplingRate?: number;
+    endpoint: string;
     resourceAttributes?: Record<string, string>;
 }
 
 function buildProvider(opts: OtelTracingOptions): NodeTracerProvider {
-    const exporter = new OTLPTraceExporter({ url: opts.otlpEndpoint });
+    const exporter = new OTLPTraceExporter({ url: opts.endpoint });
     const rate = opts.samplingRate ?? 1.0;
     const root = rate >= 1.0
         ? new AlwaysOnSampler()

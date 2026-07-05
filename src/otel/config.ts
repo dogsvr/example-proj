@@ -2,7 +2,6 @@
 
 import type { MetricsConfig, TraceConfig, LogConfig } from '@dogsvr/dogsvr/main_thread';
 import type { Level } from '@dogsvr/logger/main_thread';
-import type { WorkerMetricsCfg } from './metrics_worker';
 
 export interface MetricsConfigExt extends MetricsConfig {
     /** OTLP/HTTP endpoint. Falls back to OTEL_EXPORTER_OTLP_METRICS_ENDPOINT then DEFAULT_OTLP_METRICS_ENDPOINT. */
@@ -33,8 +32,30 @@ export interface OtelConfigExt {
     logs?:    LogConfigExt;
 }
 
+export interface WorkerMetricsCfg {
+    enabled: boolean;
+    /** OTLP/HTTP endpoint. Falls back to OTEL_EXPORTER_OTLP_METRICS_ENDPOINT then DEFAULT_OTLP_METRICS_ENDPOINT. */
+    endpoint?: string;
+    mongo?: { enabled: boolean; samplingRate?: number };
+    redis?: { enabled: boolean; samplingRate?: number };
+    colyseus?: {
+        tickDuration?: boolean;
+        roomCount?: boolean;
+        roomClients?: boolean;
+        broadcastBytes?: boolean;
+        broadcastCount?: boolean;
+    };
+    logEvents?: boolean;
+    threadStats?: {
+        heap?: boolean;
+        elu?: boolean;
+        gc?: boolean;
+    };
+    cmdHdl?: boolean;
+}
+
 /** Worker has no logs sub-block; logger init flows through workerData.loggerInit. */
 export interface WorkerOtelConfigExt {
-    metrics?: WorkerMetricsCfg & { endpoint?: string };
+    metrics?: WorkerMetricsCfg;
     traces?:  TraceConfigExt;
 }

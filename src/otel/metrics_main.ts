@@ -10,16 +10,13 @@ import {
     type MetricSink,
 } from '@dogsvr/dogsvr/main_thread';
 import type { MetricsConfigExt } from './config';
-import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './defaults';
+import { DURATION_BUCKETS_MS } from './defaults';
 
 const METRIC_NAMES = {
     cmdDuration:            'dogsvr_cmd_duration',
     txnPending:             'dogsvr_txn_pending',
     txnTimeoutTotal:        'dogsvr_txn_timeout_total',
     workerPending:          'dogsvr_worker_pending',
-    tickDuration:           'colyseus_tick_duration',
-    redisOpDuration:        'redis_op_duration',
-    mongoOpDuration:        'mongo_op_duration',
     threadCpuTime:          'dogsvr_thread_cpu_time_seconds_total',
     threadCpuWait:          'dogsvr_thread_cpu_wait_seconds_total',
     threadCpuUtilization:   'dogsvr_thread_cpu_utilization',
@@ -31,50 +28,37 @@ const METRIC_NAMES = {
 let meterProvider: MeterProvider | null = null;
 let eventLoopHist: IntervalHistogram | null = null;
 
-export interface OtelMetricsOptions {
+interface MainMetricsInit extends MetricsConfigExt {
     svr: string;
-    metricsConfig: MetricsConfigExt;
-    otlpEndpoint?: string;
+    endpoint: string;
 }
 
-export function setupOtelMetrics(opts: OtelMetricsOptions): MetricSink {
+export function setupOtelMetrics(input: MainMetricsInit): MetricSink {
     if (meterProvider) {
         throw new Error('setupOtelMetrics already called');
     }
 
     const exporter = new OTLPMetricExporter({
-        url: opts.otlpEndpoint ?? DEFAULT_OTLP_METRICS_ENDPOINT,
+        url: input.endpoint,
     });
 
     meterProvider = new MeterProvider({
-        resource: resourceFromAttributes({ 'service.name': opts.svr }),
+        resource: resourceFromAttributes({ 'service.name': input.svr }),
         readers: [new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 5000 })],
         views: [
             {
                 instrumentName: METRIC_NAMES.cmdDuration,
                 aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: DURATION_BUCKETS_MS } },
             },
-            {
-                instrumentName: METRIC_NAMES.tickDuration,
-                aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: TICK_BUCKETS_MS } },
-            },
-            {
-                instrumentName: METRIC_NAMES.redisOpDuration,
-                aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: DURATION_BUCKETS_MS } },
-            },
-            {
-                instrumentName: METRIC_NAMES.mongoOpDuration,
-                aggregation: { type: AggregationType.EXPLICIT_BUCKET_HISTOGRAM, options: { boundaries: DURATION_BUCKETS_MS } },
-            },
         ],
     });
     metrics.setGlobalMeterProvider(meterProvider);
 
-    registerDefaultMetrics(opts.svr);
-    registerPendingMetrics(opts.svr, opts.metricsConfig);
-    registerThreadStatsMetrics(opts.svr, opts.metricsConfig);
+    registerDefaultMetrics(input.svr);
+    registerPendingMetrics(input);
+    registerThreadStatsMetrics(input);
 
-    return createMetricSink(opts.svr, opts.metricsConfig);
+    return createMetricSink(input);
 }
 
 function registerDefaultMetrics(svr: string): void {
@@ -114,16 +98,17 @@ function registerDefaultMetrics(svr: string): void {
     });
 }
 
-function registerPendingMetrics(svr: string, cfg: MetricsConfigExt): void {
+function registerPendingMetrics(input: MainMetricsInit): void {
     const meter = metrics.getMeter('@dogsvr/example-proj');
+    const svr = input.svr;
 
-    if (cfg.txnPending) {
+    if (input.txnPending) {
         meter.createObservableGauge(METRIC_NAMES.txnPending, {
             description: 'Pending transactions in TxnMgr.',
         }).addCallback((r) => r.observe(getTxnPendingCount(), { svr }));
     }
 
-    if (cfg.workerPending) {
+    if (input.workerPending) {
         meter.createObservableGauge(METRIC_NAMES.workerPending, {
             description: 'In-flight requests per worker thread.',
         }).addCallback((r) => {
@@ -135,9 +120,10 @@ function registerPendingMetrics(svr: string, cfg: MetricsConfigExt): void {
     }
 }
 
-function registerThreadStatsMetrics(svr: string, cfg: MetricsConfigExt): void {
-    if (!cfg.threadStats?.enabled) return;
+function registerThreadStatsMetrics(input: MainMetricsInit): void {
+    if (!input.threadStats?.enabled) return;
     const meter = metrics.getMeter('@dogsvr/example-proj');
+    const svr = input.svr;
 
     const cpuTime = meter.createObservableCounter(METRIC_NAMES.threadCpuTime, {
         description: 'Cumulative CPU run time per thread.',
@@ -188,8 +174,9 @@ interface InFlightCmd {
     startNs: bigint;
 }
 
-function createMetricSink(svr: string, cfg: MetricsConfigExt): MetricSink {
+function createMetricSink(input: MainMetricsInit): MetricSink {
     const meter = metrics.getMeter('@dogsvr/example-proj');
+    const svr = input.svr;
     const cmdDuration = meter.createHistogram(METRIC_NAMES.cmdDuration, {
         description: 'Time from main-thread dispatch to worker reply.',
         unit: 'ms',
@@ -199,11 +186,11 @@ function createMetricSink(svr: string, cfg: MetricsConfigExt): MetricSink {
     });
 
     const inFlight = new Map<number, InFlightCmd>();
-    const sampleRate = cfg.samplingRate ?? 1.0;
+    const sampleRate = input.samplingRate ?? 1.0;
 
     return {
         onCmdStart(txnId: number, cmdId: number): void {
-            if (!cfg.cmdDuration) return;
+            if (!input.cmdDuration) return;
             if (sampleRate < 1.0 && Math.random() >= sampleRate) return;
             inFlight.set(txnId, { cmdId, startNs: process.hrtime.bigint() });
         },

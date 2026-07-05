@@ -11,13 +11,6 @@
             "enabled": true,
             "mongo": { "enabled": true, "samplingRate": 1.0 },
             "redis": { "enabled": true, "samplingRate": 1.0 },
-            "colyseus": {
-                "tickDuration": false,
-                "roomCount": false,
-                "roomClients": false,
-                "broadcastBytes": false,
-                "broadcastCount": false
-            },
             "logEvents": true,
             "threadStats": { "heap": true, "elu": true, "gc": true },
             "cmdHdl": true

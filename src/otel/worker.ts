@@ -22,7 +22,7 @@ export function setupOtelWorker(svr: string): void {
             ?? process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
             ?? DEFAULT_OTLP_TRACES_ENDPOINT;
         setupOtelTracing(
-            { serviceName: `${svr}-worker`, otlpEndpoint: endpoint, samplingRate: otel.traces.samplingRate },
+            { ...otel.traces, serviceName: `${svr}-worker`, endpoint },
             dogsvrWorker.setSpanSink,
         );
         dogsvrWorker.onShutdown(shutdownOtelTracing);
@@ -34,7 +34,7 @@ export function setupOtelWorker(svr: string): void {
         const workerIndex = typeof workerData?.workerIndex === 'number' ? workerData.workerIndex : undefined;
         initWorkerMetrics({
             ...otel.metrics,
-            otlpEndpoint: endpoint,
+            endpoint,
             serviceName: `${svr}-worker`,
             workerIndex,
         });

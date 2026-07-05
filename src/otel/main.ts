@@ -42,7 +42,7 @@ export function setupOtelMain(svr: string): void {
             ?? process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
             ?? DEFAULT_OTLP_TRACES_ENDPOINT;
         setupOtelTracing(
-            { serviceName: svr, otlpEndpoint: endpoint, samplingRate: otel.traces.samplingRate },
+            { ...otel.traces, serviceName: svr, endpoint },
             dogsvr.setSpanSink,
         );
         dogsvr.onShutdown(shutdownOtelTracing);
@@ -51,11 +51,7 @@ export function setupOtelMain(svr: string): void {
         const endpoint = otel.metrics.endpoint
             ?? process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
             ?? DEFAULT_OTLP_METRICS_ENDPOINT;
-        dogsvr.setMetricSink(setupOtelMetrics({
-            svr,
-            metricsConfig: otel.metrics,
-            otlpEndpoint: endpoint,
-        }));
+        dogsvr.setMetricSink(setupOtelMetrics({ ...otel.metrics, svr, endpoint }));
         dogsvr.onShutdown(shutdownOtelMetrics);
     }
 }

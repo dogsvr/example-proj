@@ -8,7 +8,8 @@ import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { WorkerMetricSink } from '@dogsvr/dogsvr/worker_thread';
-import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS, DEFAULT_OTLP_METRICS_ENDPOINT } from './defaults';
+import type { WorkerMetricsCfg } from './config';
+import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS } from './defaults';
 
 const GC_BUCKETS_SEC = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5];
 
@@ -20,30 +21,10 @@ const GC_KIND: Record<number, string> = {
     15: 'all',
 };
 
-export interface WorkerMetricsCfg {
-    enabled: boolean;
-    serviceName?: string;
-    workerIndex?: number;
-    mongo?: { enabled: boolean; samplingRate?: number };
-    redis?: { enabled: boolean; samplingRate?: number };
-    colyseus?: {
-        tickDuration?: boolean;
-        roomCount?: boolean;
-        roomClients?: boolean;
-        broadcastBytes?: boolean;
-        broadcastCount?: boolean;
-    };
-    logEvents?: boolean;
-    threadStats?: {
-        heap?: boolean;
-        elu?: boolean;
-        gc?: boolean;
-    };
-    cmdHdl?: boolean;
-}
-
 interface WorkerMetricsInit extends WorkerMetricsCfg {
-    otlpEndpoint?: string;
+    endpoint: string;
+    serviceName: string;
+    workerIndex?: number;
 }
 
 let cfg: WorkerMetricsCfg = { enabled: false };
@@ -66,11 +47,11 @@ export function initWorkerMetrics(input: WorkerMetricsInit): void {
     if (!cfg.enabled) return;
 
     const exporter = new OTLPMetricExporter({
-        url: input.otlpEndpoint ?? DEFAULT_OTLP_METRICS_ENDPOINT,
+        url: input.endpoint,
     });
 
     meterProvider = new MeterProvider({
-        resource: resourceFromAttributes({ 'service.name': cfg.serviceName ?? 'unknown-worker' }),
+        resource: resourceFromAttributes({ 'service.name': input.serviceName }),
         readers: [new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 5000 })],
         views: [
             {
@@ -109,8 +90,8 @@ export function initWorkerMetrics(input: WorkerMetricsInit): void {
     broadcastMsgsTotal    = meter.createCounter('colyseus_broadcast_msgs_total',  { description: 'Total broadcast messages.' });
     logEventsTotal        = meter.createCounter('log_events_total',        { description: 'Log events by level.' });
 
-    registerThreadStats(cfg);
-    registerCmdHdlStats(cfg);
+    registerThreadStats(input);
+    registerCmdHdlStats(input);
 }
 
 function sampled(rate: number | undefined): boolean {
@@ -208,12 +189,12 @@ let cmdHdlPending: number = 0;
 const cmdHdlInFlight = new Map<number, bigint>();
 const cmdHdlLabelBase: Record<string, string | number> = {};
 
-function registerThreadStats(cfgIn: WorkerMetricsCfg): void {
+function registerThreadStats(cfgIn: WorkerMetricsInit): void {
     const ts = cfgIn.threadStats;
     if (!ts) return;
     const meter = metrics.getMeter('@dogsvr/example-proj-worker');
     const attrs: Record<string, string | number> = {
-        svr: cfgIn.serviceName ?? 'unknown-worker',
+        svr: cfgIn.serviceName,
         node_thread_id: threadId,
     };
     if (typeof cfgIn.workerIndex === 'number') attrs.worker_index = cfgIn.workerIndex;
@@ -283,11 +264,11 @@ function registerThreadStats(cfgIn: WorkerMetricsCfg): void {
     }
 }
 
-function registerCmdHdlStats(cfgIn: WorkerMetricsCfg): void {
+function registerCmdHdlStats(cfgIn: WorkerMetricsInit): void {
     if (!cfgIn.cmdHdl) return;
     const meter = metrics.getMeter('@dogsvr/example-proj-worker');
     const attrs: Record<string, string | number> = {
-        svr: cfgIn.serviceName ?? 'unknown-worker',
+        svr: cfgIn.serviceName,
         node_thread_id: threadId,
     };
     if (typeof cfgIn.workerIndex === 'number') attrs.worker_index = cfgIn.workerIndex;
@@ -336,4 +317,3 @@ export function createWorkerMetricSink(): WorkerMetricSink {
         },
     };
 }
-
