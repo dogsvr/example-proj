@@ -1,6 +1,6 @@
 {
     "log": {
-        "level": "info"
+        "level": "trace"
     },
     "mongoUri": "mongodb://127.0.0.1:27017",
     "redisUri": "redis://127.0.0.1:6379",

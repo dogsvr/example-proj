@@ -3,7 +3,7 @@
     "workerThreadNum": 2,
     "workerConfigPath": "./worker_thread_config.json",
     "log": {
-        "level": "info",
+        "level": "trace",
         "mode": "central"
     },
     "cl": {

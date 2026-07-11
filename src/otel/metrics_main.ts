@@ -95,6 +95,8 @@ function registerDefaultMetrics(svr: string): void {
     }).addCallback((result) => {
         if (!eventLoopHist) return;
         result.observe(eventLoopHist.mean / 1e9, attrs);
+        // reset() → per-scrape window; forfeits percentiles/stddev/max from this instance.
+        eventLoopHist.reset();
     });
 }
 

@@ -1,4 +1,4 @@
-import { getMongoClient } from './mongo_proxy';
+import { timedColl } from './mongo_proxy';
 import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 
 const log = rootLog.child({ module: 'shared/gid_util' });
@@ -39,8 +39,7 @@ export async function generateGid(openId: string, zoneId: number): Promise<numbe
  * Doc: { _id: "zone_{zoneId}", seq: N } → gid = zoneId * GID_ZONE_MULTIPLIER + seq
  */
 async function defaultGenerateGid(openId: string, zoneId: number): Promise<number> {
-    const db = getMongoClient().db("dogsvr-example-proj");
-    const counterColl = db.collection('gid_counter');
+    const counterColl = timedColl('gid_counter');
     const result = await counterColl.findOneAndUpdate(
         { _id: `zone_${zoneId}` as any },
         { $inc: { seq: 1 } },

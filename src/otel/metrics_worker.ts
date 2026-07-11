@@ -28,6 +28,7 @@ interface WorkerMetricsInit extends WorkerMetricsCfg {
 }
 
 let cfg: WorkerMetricsCfg = { enabled: false };
+let svrLabel = '';
 let meterProvider: MeterProvider | null = null;
 
 let mongoOpDuration: Histogram | null = null;
@@ -44,14 +45,21 @@ let logEventsTotal: Counter | null = null;
 /** Initialize worker metrics. Idempotent. Call once from worker entry. */
 export function initWorkerMetrics(input: WorkerMetricsInit): void {
     cfg = input;
+    svrLabel = input.serviceName;
     if (!cfg.enabled) return;
 
     const exporter = new OTLPMetricExporter({
         url: input.endpoint,
     });
 
+    const instanceId = typeof input.workerIndex === 'number'
+        ? `${input.serviceName}-${input.workerIndex}`
+        : input.serviceName;
     meterProvider = new MeterProvider({
-        resource: resourceFromAttributes({ 'service.name': input.serviceName }),
+        resource: resourceFromAttributes({
+            'service.name': input.serviceName,
+            'service.instance.id': instanceId,
+        }),
         readers: [new PeriodicExportingMetricReader({ exporter, exportIntervalMillis: 5000 })],
         views: [
             {
@@ -108,10 +116,10 @@ export async function timeMongoOp<T>(coll: string, op: string, fn: () => Promise
     try {
         const r = await fn();
         const ms = Number(process.hrtime.bigint() - start) / 1e6;
-        mongoOpDuration!.record(ms, { coll, op });
+        mongoOpDuration!.record(ms, { svr: svrLabel, coll, op });
         return r;
     } catch (err) {
-        mongoOpErrorTotal!.add(1, { coll, op });
+        mongoOpErrorTotal!.add(1, { svr: svrLabel, coll, op });
         throw err;
     }
 }
@@ -124,10 +132,10 @@ export async function timeRedisOp<T>(op: string, fn: () => Promise<T>): Promise<
     try {
         const r = await fn();
         const ms = Number(process.hrtime.bigint() - start) / 1e6;
-        redisOpDuration!.record(ms, { op });
+        redisOpDuration!.record(ms, { svr: svrLabel, op });
         return r;
     } catch (err) {
-        redisOpErrorTotal!.add(1, { op });
+        redisOpErrorTotal!.add(1, { svr: svrLabel, op });
         throw err;
     }
 }
@@ -239,6 +247,8 @@ function registerThreadStats(cfgIn: WorkerMetricsInit): void {
         }).addCallback((r) => {
             if (!eventLoopHist) return;
             r.observe(eventLoopHist.mean / 1e9, attrs);
+            // reset() → per-scrape window; forfeits percentiles/stddev/max from this instance.
+            eventLoopHist.reset();
         });
     }
 
