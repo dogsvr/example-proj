@@ -8,6 +8,7 @@ import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import type { WorkerMetricSink } from '@dogsvr/dogsvr/worker_thread';
+import { getWorkerMsgChannelStats } from '@dogsvr/dogsvr/worker_thread';
 import type { WorkerMetricsCfg } from './config';
 import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS } from './defaults';
 
@@ -100,6 +101,30 @@ export function initWorkerMetrics(input: WorkerMetricsInit): void {
 
     registerThreadStats(input);
     registerCmdHdlStats(input);
+    registerMsgChannelStats(input);
+}
+
+function registerMsgChannelStats(input: WorkerMetricsInit): void {
+    const meter = metrics.getMeter('@dogsvr/example-proj-worker');
+    const attrs: Record<string, string | number> = {
+        svr: input.serviceName,
+        side: 'worker',
+    };
+    if (typeof input.workerIndex === 'number') attrs.worker_index = input.workerIndex;
+
+    const sabHits = meter.createObservableCounter('dogsvr_msg_channel_sab_hits_total', {
+        description: 'Worker→main Msg frames written to SAB ring buffer.',
+    });
+    const fallback = meter.createObservableCounter('dogsvr_msg_channel_fallback_total', {
+        description: 'Worker→main Msg frames that fell back to postMessage.',
+    });
+
+    meter.addBatchObservableCallback((observer) => {
+        const s = getWorkerMsgChannelStats();
+        if (!s) return;
+        observer.observe(sabHits, s.sabHits, attrs);
+        observer.observe(fallback, s.fallbackHits, attrs);
+    }, [sabHits, fallback]);
 }
 
 function sampled(rate: number | undefined): boolean {

@@ -2,9 +2,11 @@
     "workerThreadRunFile": "./battlesvr_logic.js",
     "workerThreadNum": 1,
     "workerConfigPath": "./worker_thread_config.json",
+    "channel": { "msg": { "transport": "sab" } },
     "log": {
         "level": "trace",
-        "mode": "central"
+        "mode": "central",
+        "channel": { "transport": "sab" }
     },
     "cl": {
         "grpc": { "type": "grpc", "port": 30001 }

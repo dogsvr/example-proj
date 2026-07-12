@@ -2,9 +2,11 @@
     "workerThreadRunFile": "./zonesvr_logic.js",
     "workerThreadNum": 2,
     "workerConfigPath": "./worker_thread_config.json",
+    "channel": { "msg": { "transport": "postMessage" } },
     "log": {
         "level": "trace",
-        "mode": "central"
+        "mode": "central",
+        "channel": { "transport": "postMessage" }
     },
     "cl": {
         "tsrpc": { "type": "tsrpc", "svrType": "ws", "port": 20000, "log": { "level": "error", "body": false } },

@@ -7,6 +7,7 @@ import {
     getLatestThreadStatsSnapshot,
     getTxnPendingCount,
     getWorkerPendingCounts,
+    getMsgChannelStats,
     type MetricSink,
 } from '@dogsvr/dogsvr/main_thread';
 import type { MetricsConfigExt } from './config';
@@ -17,6 +18,8 @@ const METRIC_NAMES = {
     txnPending:             'dogsvr_txn_pending',
     txnTimeoutTotal:        'dogsvr_txn_timeout_total',
     workerPending:          'dogsvr_worker_pending',
+    msgChannelSabHits:      'dogsvr_msg_channel_sab_hits_total',
+    msgChannelFallback:     'dogsvr_msg_channel_fallback_total',
     threadCpuTime:          'dogsvr_thread_cpu_time_seconds_total',
     threadCpuWait:          'dogsvr_thread_cpu_wait_seconds_total',
     threadCpuUtilization:   'dogsvr_thread_cpu_utilization',
@@ -56,6 +59,7 @@ export function setupOtelMetrics(input: MainMetricsInit): MetricSink {
 
     registerDefaultMetrics(input.svr);
     registerPendingMetrics(input);
+    registerMsgChannelMetrics(input);
     registerThreadStatsMetrics(input);
 
     return createMetricSink(input);
@@ -120,6 +124,27 @@ function registerPendingMetrics(input: MainMetricsInit): void {
             }
         });
     }
+}
+
+function registerMsgChannelMetrics(input: MainMetricsInit): void {
+    if (input.msgChannel === false) return;
+    const meter = metrics.getMeter('@dogsvr/example-proj');
+    const svr = input.svr;
+
+    const sabHits = meter.createObservableCounter(METRIC_NAMES.msgChannelSabHits, {
+        description: 'Main→worker Msg frames written to SAB ring buffer.',
+    });
+    const fallback = meter.createObservableCounter(METRIC_NAMES.msgChannelFallback, {
+        description: 'Main→worker Msg frames that fell back to postMessage (SAB full or disabled).',
+    });
+
+    meter.addBatchObservableCallback((observer) => {
+        for (const s of getMsgChannelStats()) {
+            const attrs = { svr, worker_index: s.workerIndex, side: 'main' };
+            observer.observe(sabHits, s.sabHits, attrs);
+            observer.observe(fallback, s.fallbackHits, attrs);
+        }
+    }, [sabHits, fallback]);
 }
 
 function registerThreadStatsMetrics(input: MainMetricsInit): void {

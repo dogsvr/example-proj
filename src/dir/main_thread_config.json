@@ -2,6 +2,7 @@
     "workerThreadRunFile": "./dir_logic.js",
     "workerThreadNum": 2,
     "workerConfigPath": "./worker_thread_config.json",
+    "channel": { "msg": { "transport": "sab" } },
     "log": {
         "level": "trace",
         "mode": "inline"

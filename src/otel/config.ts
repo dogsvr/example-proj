@@ -9,6 +9,8 @@ export interface MetricsConfigExt extends MetricsConfig {
     cmdDuration?: boolean;
     txnPending?: boolean;
     workerPending?: boolean;
+    /** SAB msg-channel hit/fallback counters (main side). Default on. */
+    msgChannel?: boolean;
     /** Sampling rate for cmd timing. Default 1.0. */
     samplingRate?: number;
 }
