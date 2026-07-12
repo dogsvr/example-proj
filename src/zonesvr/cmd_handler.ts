@@ -15,6 +15,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     log.debug({ req }, "ZONE_LOGIN req");
 
     if (typeof req.name !== 'string' || !req.name.trim()) {
+        log.warn({ name: req.name }, "invalid name");
         throw new dogsvr.HandlerError(1005, 'invalid name');
     }
 
@@ -35,6 +36,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
             // register new role
             const gid = await generateGid(req.openId, req.zoneId);
             if (gid < 0) {
+                log.warn({ openId: req.openId, zoneId: req.zoneId, gid }, "generateGid failed");
                 throw new dogsvr.HandlerError(1001, 'generateGid failed');
             }
             role = { openId: req.openId, zoneId: req.zoneId, gid: gid, name: req.name, score: 0 };
@@ -65,6 +67,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg) => {
     }, JSON.stringify({ syncType: req.syncType }));
 
     if (battleRes == null) {
+        log.warn({ head: reqMsg.head }, "call battlesvr timeout");
         throw new dogsvr.HandlerError(1002, 'call battlesvr timeout');
     }
     return battleRes as string;
@@ -127,11 +130,13 @@ dogsvr.regCmdHandler(cmdId.ZONE_QUERY_RANK_LIST, async (reqMsg) => {
 
     const rankRow = getCfgRow<RankT>('TbRank', req.rankId);
     if (!rankRow) {
+        log.warn({ rankId: req.rankId }, "rank cfg not found");
         throw new dogsvr.HandlerError(1003, `rank cfg not found: rankId=${req.rankId}`);
     }
     const roleColl = timedColl('role_coll');
     const roleFound = await roleColl.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
     if (roleFound.length == 0) {
+        log.warn({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, "role not found");
         throw new dogsvr.HandlerError(1004, `role not found: openId=${reqMsg.head.openId} zoneId=${reqMsg.head.zoneId}`);
     }
     const selfRole = roleFound[0] as unknown as cmdProto.RoleInfo;
