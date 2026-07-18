@@ -1,17 +1,4 @@
 // pm2 ecosystem file for example-proj.
-//
-// Design notes:
-// - exec_mode stays the implicit "fork" default. dogsvr spawns its own
-//   worker_threads inside each process, so letting pm2 run a cluster of
-//   duplicate node processes would double-schedule workers.
-// - No wait_ready / listen_timeout: the three servers have NO startup ordering
-//   dependency (gRPC clients only resolve addresses when the first RPC fires).
-// - Process names prefixed `exp-` so they don't collide with other projects
-//   sharing the same pm2 daemon.
-// - cwd is pinned so `pm2 start ecosystem.config.js` works regardless of the
-//   directory the command is invoked from.
-// - time: false disables PM2's stdout timestamp prefix so it doesn't corrupt
-//   the NDJSON lines emitted by @dogsvr/logger.
 const path = require('node:path');
 
 const cwd = __dirname;
@@ -23,6 +10,11 @@ const base = {
     kill_timeout: 5000,
     time: false,
     cwd,
+    // Disable @pm2/io agent: its http.emit monkey-patch adds CPU overhead on
+    // WebSocket-heavy paths. `pm2 trigger` still works via dogsvr's native IPC.
+    env: {
+        PM2_IO: 'false',
+    },
 };
 
 module.exports = {

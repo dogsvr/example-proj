@@ -4,6 +4,7 @@ import { setupLoggerInWorker, type WorkerInitPayload, type Level } from '@dogsvr
 import "./cmd_handler";
 import { initMongo } from "../shared/mongo_proxy";
 import { setupOtelWorker } from '../otel/worker';
+import { setupProfileWorker } from '../profiling/profile_worker';
 
 interface DirConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };
@@ -23,5 +24,6 @@ dogsvr.workerReady(async () => {
         base: { svrId: 'dir' },
     });
     setupOtelWorker('dir');
+    setupProfileWorker('dir');
     await initMongo(cfg.mongoUri);
 });

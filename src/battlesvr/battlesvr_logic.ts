@@ -10,6 +10,7 @@ import { StateSyncBattleRoom } from "./rooms/state_sync_battle_room";
 import { LockstepSyncBattleRoom } from "./rooms/lockstep_sync_battle_room";
 import "./cmd_handler";
 import { setupOtelWorker } from '../otel/worker';
+import { setupProfileWorker } from '../profiling/profile_worker';
 
 interface BattleSvrConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };
@@ -45,5 +46,6 @@ dogsvr.workerReady(async () => {
         base: { svrId: 'battlesvr' },
     });
     setupOtelWorker('battlesvr');
+    setupProfileWorker('battlesvr');
     startColyseus(cfg.colyseusPort);
 });

@@ -1,4 +1,4 @@
-import { MongoClient, Collection, Document } from 'mongodb'
+import { MongoClient, Db, Collection, Document } from 'mongodb'
 import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import { RoleBriefInfo } from '../protocols/cmd_proto';
 import { timeMongoOp } from '../otel/metrics_worker';
@@ -7,16 +7,18 @@ const log = rootLog.child({ module: 'shared/mongo_proxy' });
 
 const DB_NAME = "dogsvr-example-proj";
 let client: MongoClient;
+let cachedDb: Db | undefined;
+const wrappedCollCache = new Map<string, Collection<Document>>();
 
 export async function initMongo(uri: string) {
     client = new MongoClient(uri);
     await client.connect();
+    cachedDb = client.db(DB_NAME);
     log.info('mongo connected');
 }
 
 export async function ensureRoleCollIndexes() {
-    const db = client.db(DB_NAME);
-    const collection = db.collection('role_coll');
+    const collection = cachedDb!.collection('role_coll');
     await collection.createIndex({ openId: 1, zoneId: 1 });
     await collection.createIndex({ gid: 1 });
 }
@@ -29,10 +31,18 @@ export function getMongoClient() {
  * Return a Collection where every async method is timed via mongo_op_duration_ms.
  * Synchronous methods (e.g. find returning a cursor) pass through; cursor terminal
  * methods (toArray, next) are wrapped recursively.
+ *
+ * Db and wrapped Collection are cached — both are stateless views over the shared
+ * MongoClient pool, and re-allocating them per call is not free at high QPS.
  */
 export function timedColl<T extends Document = Document>(coll: string): Collection<T> {
-    const raw = client.db(DB_NAME).collection<T>(coll);
-    return wrapAsyncMethods(raw, coll, '') as Collection<T>;
+    let wrapped = wrappedCollCache.get(coll);
+    if (!wrapped) {
+        const raw = cachedDb!.collection<Document>(coll);
+        wrapped = wrapAsyncMethods(raw, coll, '') as Collection<Document>;
+        wrappedCollCache.set(coll, wrapped);
+    }
+    return wrapped as unknown as Collection<T>;
 }
 
 function wrapAsyncMethods<O extends object>(target: O, coll: string, prefix: string): O {

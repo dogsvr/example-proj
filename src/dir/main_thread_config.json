@@ -28,5 +28,11 @@
             "enabled": false,
             "level": "trace"
         }
+    },
+    "profiling": {
+        "enabled": false,
+        "endpoint": "http://127.0.0.1:4040",
+        "samplingIntervalMicros": 10000,
+        "appName": "example-proj"
     }
 }

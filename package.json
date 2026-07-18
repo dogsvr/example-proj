@@ -39,6 +39,7 @@
     "@opentelemetry/sdk-metrics": "^2.8.0",
     "@opentelemetry/sdk-trace-node": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.41.1",
+    "@pyroscope/nodejs": "^0.6.1",
     "@redis/client": "^5.12.1",
     "colyseus": "^0.17.10",
     "example-proj-cfg": "file:../example-proj-cfg",

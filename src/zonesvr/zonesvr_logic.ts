@@ -8,6 +8,7 @@ import { openCfgDb } from '@dogsvr/cfg-luban';
 import * as cfgModule from 'example-proj-cfg';
 import * as path from 'node:path';
 import { setupOtelWorker } from '../otel/worker';
+import { setupProfileWorker } from '../profiling/profile_worker';
 
 interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };
@@ -30,6 +31,7 @@ dogsvr.workerReady(async () => {
         base: { svrId: 'zonesvr' },
     });
     setupOtelWorker('zonesvr');
+    setupProfileWorker('zonesvr');
     openCfgDb({
         dbPath: path.resolve(__dirname, cfg.cfgDbPath),
         tableKeysPath: path.resolve(__dirname, cfg.tableKeysPath),
