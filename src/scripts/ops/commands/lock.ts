@@ -1,7 +1,7 @@
 /**
  * Distributed-lock inspection and release.
  *
- * Locks use keys `rolelock|<openId>|<zoneId>` (see src/shared/redis_proxy.ts
+ * Locks use keys `rolelock|<openId>|<zoneId>` (see src/lib/redis_proxy.ts
  * DistributedLock). They have a 5-second TTL so normal operation self-heals;
  * lock:release is for pathological cases where a server crashed mid-section.
  */

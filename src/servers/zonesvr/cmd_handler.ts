@@ -1,14 +1,14 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../protocols/cmd_id';
-import * as cmdProto from '../protocols/cmd_proto';
-import { DistributedLock, RankUtil } from "../shared/redis_proxy";
+import * as cmdId from '../../protocols/cmd_id';
+import * as cmdProto from '../../protocols/cmd_proto';
+import { DistributedLock, RankUtil } from "../../lib/redis_proxy";
 import { getCfgRow, forEachCfgRow } from '@dogsvr/cfg-luban';
 import type { RankT } from 'example-proj-cfg';
-import { timedColl, batchQueryRoleBriefInfo } from "../shared/mongo_proxy";
-import { now, nowMs } from "../shared/time_util";
-import { generateGid } from "../shared/gid_util";
+import { timedColl, batchQueryRoleBriefInfo } from "../../lib/mongo_proxy";
+import { now, nowMs } from "../../lib/time_util";
+import { generateGid } from "../../lib/gid_util";
 
-const log = dogsvr.log.child({ module: 'zonesvr/cmd_handler' });
+const log = dogsvr.log.child({ module: 'cmd_handler' });
 
 dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     const req: cmdProto.ZoneLoginReq = JSON.parse(reqMsg.body as string);

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import type { OpsCommand, RedisClient } from '../command';
 import { confirmDestructive, hasFlag, optNum, optStr, requireNum } from '../command';
-import { RankUtil } from '../../../shared/redis_proxy';
+import { RankUtil } from '../../../lib/redis_proxy';
 import { getOpsConfig } from '../../ops_config';
 
 /** SCAN keys matching `pattern` — see rank.ts for the KEYS-vs-SCAN rationale. */

@@ -45,7 +45,15 @@ export function setupProfileMain(svr: string): void {
             },
         });
         Pyroscope.start();
-        dogsvr.onShutdown(async () => { await Pyroscope.stop(); });
+        dogsvr.onShutdown(async () => {
+            await Promise.race([
+                Pyroscope.stop(),
+                new Promise<void>((resolve) => {
+                    const t = setTimeout(resolve, 2000);
+                    t.unref();
+                }),
+            ]);
+        });
     }
 
     process.on('SIGUSR2', onSigusr2);

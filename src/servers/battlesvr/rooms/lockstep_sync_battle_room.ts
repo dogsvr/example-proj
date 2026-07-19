@@ -1,13 +1,13 @@
 import { Room, Client, ServerError } from "colyseus";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../../protocols/cmd_id';
+import * as cmdId from '../../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 import {
     observeTickDuration, incRoomCount, decRoomCount,
     incRoomClients, decRoomClients, recordBroadcast,
-} from '../../otel/metrics_worker';
+} from '../../../otel/metrics_worker';
 
-const log = dogsvr.log.child({ module: 'battlesvr/rooms/lockstep_sync_battle_room' });
+const log = dogsvr.log.child({ module: 'lockstep_sync_battle_room' });
 
 const ROOM_TYPE = 'lockstep_sync';
 

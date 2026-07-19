@@ -365,7 +365,7 @@ Requirements on the target machine:
   - Node.js >= 22 LTS
   - pm2 installed globally
   - Redis + MongoDB reachable at the URIs in
-    example-proj/dist/zonesvr/worker_thread_config.json (and dir/, battlesvr/)
+    example-proj/dist/servers/zonesvr/worker_thread_config.json (and dir/, battlesvr/)
 
 Deploy:
   cd example-proj

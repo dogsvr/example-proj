@@ -22,17 +22,17 @@ module.exports = {
         {
             ...base,
             name: 'exp-dir',
-            script: path.join('dist', 'dir', 'dir.js'),
+            script: path.join('dist', 'servers', 'dir', 'dir.js'),
         },
         {
             ...base,
             name: 'exp-zonesvr',
-            script: path.join('dist', 'zonesvr', 'zonesvr.js'),
+            script: path.join('dist', 'servers', 'zonesvr', 'zonesvr.js'),
         },
         {
             ...base,
             name: 'exp-battlesvr',
-            script: path.join('dist', 'battlesvr', 'battlesvr.js'),
+            script: path.join('dist', 'servers', 'battlesvr', 'battlesvr.js'),
         },
     ],
 };

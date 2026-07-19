@@ -3,7 +3,7 @@ import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 import { RoleBriefInfo } from '../protocols/cmd_proto';
 import { timeMongoOp } from '../otel/metrics_worker';
 
-const log = rootLog.child({ module: 'shared/mongo_proxy' });
+const log = rootLog.child({ module: 'mongo_proxy' });
 
 const DB_NAME = "dogsvr-example-proj";
 let client: MongoClient;

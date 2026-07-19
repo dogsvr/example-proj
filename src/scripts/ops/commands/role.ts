@@ -4,7 +4,7 @@
  * Schema (see src/protocols/cmd_proto.ts RoleInfo):
  *   { openId, zoneId, gid, name, score, cityId?, provinceId? }
  *
- * Indexes (ensured at zonesvr startup, see src/shared/mongo_proxy.ts):
+ * Indexes (ensured at zonesvr startup, see src/lib/mongo_proxy.ts):
  *   - { openId: 1, zoneId: 1 }  // login / update PK
  *   - { gid: 1 }                // rank-list join target
  *

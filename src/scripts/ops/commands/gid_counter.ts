@@ -1,7 +1,7 @@
 /**
  * Peek at the GID auto-increment counter.
  *
- * Counter doc shape (see src/shared/gid_util.ts):
+ * Counter doc shape (see src/lib/gid_util.ts):
  *   { _id: "zone_<zoneId>", seq: <number> }
  * in collection `dogsvr-example-proj.gid_counter`.
  *

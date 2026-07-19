@@ -11,7 +11,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc && copyfiles -u 1 \"src/*/*.json\" dist",
+    "build": "rm -rf dist && tsc && copyfiles -u 1 \"src/**/*.json\" dist",
     "start": "pm2 start ecosystem.config.js",
     "stop": "pm2 stop ecosystem.config.js",
     "restart": "pm2 restart ecosystem.config.js",

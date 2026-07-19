@@ -636,4 +636,4 @@ server 用 T 仲裁 = 显式 lag compensation。
 - `example-proj-client/src/util/debug_overlay.ts` — 监控 overlay
 - `example-proj-client/src/scenes/state_sync_battle_scene.ts` — state sync 场景
 - `example-proj-client/src/scenes/lockstep_sync_battle_scene.ts` — lockstep 场景(rollback 升级起点)
-- `example-proj/src/battlesvr/rooms/state_sync_battle_room.ts` — 服务器权威物理
+- `example-proj/src/servers/battlesvr/rooms/state_sync_battle_room.ts` — 服务器权威物理

@@ -3,7 +3,7 @@
 import * as path from 'node:path';
 import type { OpsCommand } from '../command';
 import { confirmDestructive, optNum, optStr, requireNum } from '../command';
-import { RankUtil } from '../../../shared/redis_proxy';
+import { RankUtil } from '../../../lib/redis_proxy';
 import { getOpsConfig } from '../../ops_config';
 
 const DB_NAME = 'dogsvr-example-proj';

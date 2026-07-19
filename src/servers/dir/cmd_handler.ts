@@ -1,9 +1,9 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../protocols/cmd_id';
-import * as cmdProto from '../protocols/cmd_proto';
-import { timedColl } from "../shared/mongo_proxy";
+import * as cmdId from '../../protocols/cmd_id';
+import * as cmdProto from '../../protocols/cmd_proto';
+import { timedColl } from "../../lib/mongo_proxy";
 
-const log = dogsvr.log.child({ module: 'dir/cmd_handler' });
+const log = dogsvr.log.child({ module: 'cmd_handler' });
 
 dogsvr.regCmdHandler(cmdId.DIR_QUERY_ZONE_LIST, async (reqMsg) => {
     const req: cmdProto.DirQueryZoneListReq = JSON.parse(reqMsg.body as string);

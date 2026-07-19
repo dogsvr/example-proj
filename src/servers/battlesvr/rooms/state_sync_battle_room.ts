@@ -3,14 +3,14 @@ import { Schema, type, ArraySchema, MapSchema } from "@colyseus/schema";
 // @ts-expect-error
 import * as Matter from "matter-js";
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../../protocols/cmd_id';
+import * as cmdId from '../../../protocols/cmd_id';
 import { consumeTicket, TicketPayload } from '../session_ticket';
 import {
     observeTickDuration, incRoomCount, decRoomCount,
     incRoomClients, decRoomClients,
-} from '../../otel/metrics_worker';
+} from '../../../otel/metrics_worker';
 
-const log = dogsvr.log.child({ module: 'battlesvr/rooms/state_sync_battle_room' });
+const log = dogsvr.log.child({ module: 'state_sync_battle_room' });
 
 const ROOM_TYPE = 'state_sync';
 

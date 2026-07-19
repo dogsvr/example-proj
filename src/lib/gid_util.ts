@@ -1,7 +1,7 @@
 import { timedColl } from './mongo_proxy';
 import { log as rootLog } from '@dogsvr/dogsvr/worker_thread';
 
-const log = rootLog.child({ module: 'shared/gid_util' });
+const log = rootLog.child({ module: 'gid_util' });
 
 /**
  * GID (Global ID) encodes zoneId + per-zone auto-increment sequence.

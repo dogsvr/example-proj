@@ -1,9 +1,9 @@
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
-import * as cmdId from '../protocols/cmd_id';
-import * as cmdProto from '../protocols/cmd_proto';
+import * as cmdId from '../../protocols/cmd_id';
+import * as cmdProto from '../../protocols/cmd_proto';
 import { issueTicket } from './session_ticket';
 
-const log = dogsvr.log.child({ module: 'battlesvr/cmd_handler' });
+const log = dogsvr.log.child({ module: 'cmd_handler' });
 
 dogsvr.regCmdHandler(cmdId.BATTLE_START_BATTLE, async (reqMsg) => {
     const req: cmdProto.BattleStartBattleReq = JSON.parse(reqMsg.body as string);

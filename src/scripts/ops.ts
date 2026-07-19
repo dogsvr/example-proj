@@ -11,7 +11,7 @@
  *
  * Config resolution order:
  *   1. `--config <path>` flag (absolute or relative to cwd)
- *   2. Default: src/zonesvr/worker_thread_config.json relative to this file
+ *   2. Default: src/servers/zonesvr/worker_thread_config.json relative to this file
  *
  * We do NOT reach into the dogsvr loadWorkerThreadConfig() plumbing — that
  * pathway is worker-specific and pulls in main-thread IPC. A plain
@@ -27,7 +27,7 @@ import { parseArgs, type OpsContext } from './ops/command';
 import { commands } from './ops/commands';
 import { setOpsConfig, type OpsConfig } from './ops_config';
 
-const DEFAULT_CONFIG_REL = '../zonesvr/worker_thread_config.json';
+const DEFAULT_CONFIG_REL = '../servers/zonesvr/worker_thread_config.json';
 
 async function main(): Promise<number> {
     // Separate the leading command name from the rest, so `parseArgs` sees a

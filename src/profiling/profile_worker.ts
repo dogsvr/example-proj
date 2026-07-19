@@ -50,7 +50,15 @@ export function setupProfileWorker(svr: string): void {
             tags,
         });
         Pyroscope.start();
-        dogsvrWorker.onShutdown(async () => { await Pyroscope.stop(); });
+        dogsvrWorker.onShutdown(async () => {
+            await Promise.race([
+                Pyroscope.stop(),
+                new Promise<void>((resolve) => {
+                    const t = setTimeout(resolve, 2000);
+                    t.unref();
+                }),
+            ]);
+        });
     }
 
     dogsvrWorker.onWorkerBroadcast((msg) => {

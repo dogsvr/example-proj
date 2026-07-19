@@ -12,7 +12,7 @@
 import * as path from 'node:path';
 import type { OpsCommand, OpsContext, ParsedArgs, RedisClient } from '../command';
 import { confirmDestructive, hasFlag, optNum, optStr, promptYesNo, requireNum } from '../command';
-import { RankUtil } from '../../../shared/redis_proxy';
+import { RankUtil } from '../../../lib/redis_proxy';
 import { getOpsConfig } from '../../ops_config';
 
 /**

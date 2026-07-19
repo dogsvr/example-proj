@@ -2,13 +2,13 @@ import { workerData } from 'node:worker_threads';
 import * as dogsvr from '@dogsvr/dogsvr/worker_thread';
 import { setupLoggerInWorker, type WorkerInitPayload, type Level } from '@dogsvr/logger/worker_thread';
 import "./cmd_handler";
-import { initRedis } from "../shared/redis_proxy";
-import { initMongo, ensureRoleCollIndexes } from "../shared/mongo_proxy";
+import { initRedis } from "../../lib/redis_proxy";
+import { initMongo, ensureRoleCollIndexes } from "../../lib/mongo_proxy";
 import { openCfgDb } from '@dogsvr/cfg-luban';
 import * as cfgModule from 'example-proj-cfg';
 import * as path from 'node:path';
-import { setupOtelWorker } from '../otel/worker';
-import { setupProfileWorker } from '../profiling/profile_worker';
+import { setupOtelWorker } from '../../otel/worker';
+import { setupProfileWorker } from '../../profiling/profile_worker';
 
 interface ZoneSvrConfig extends dogsvr.WorkerThreadBaseConfig {
     log: { level: Level };
