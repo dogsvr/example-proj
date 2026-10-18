@@ -7,6 +7,8 @@ const base = {
     autorestart: true,
     max_restarts: 10,
     min_uptime: '10s',
+    // Only main-thread fatal errors exit now (workers recover in-process); back off: 100ms ×1.5, pm2 caps at 15s.
+    exp_backoff_restart_delay: 100,
     kill_timeout: 5000,
     time: false,
     cwd,
