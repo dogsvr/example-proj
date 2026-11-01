@@ -14,10 +14,19 @@ Process names (`exp-dir`, `exp-zonesvr`, `exp-battlesvr`) are defined in `ecosys
 
 ## What happens
 
-1. Main thread stops routing new requests to the old worker(s)
-2. In-flight transactions drain
-3. Workers are replaced with the new compiled code
-4. New requests hit the new code — no dropped connections, no client-visible restart
+1. A new worker loads the freshly built code and runs its init; the old worker keeps serving meanwhile.
+2. Once the new worker is ready it takes over the slot, and new requests hit the new code. The old worker finishes its in-flight transactions and stops. Client connections live in the main thread and stay up — except battles on battlesvr (see below).
+3. `rolling` (the default) does this one slot at a time; `allAtOnce` starts every new worker first and swaps only if all of them are ready.
+
+## Reading the result
+
+- The CLI prints `hotUpdate done` or `hotUpdate failed: <reason>` and **exits 0 either way** — check the text, not the exit code.
+- A `rolling` abort such as `hot update aborted at slot 1: init failed: Error: …; slots 0 already on the new code` means slot 0 now runs the new code and slot 1 still runs the old code, until the next hot update or restart. A slot that crashes later respawns from the files on disk, i.e. the new build.
+- Triggering again while an update is running joins that update instead of starting another one. To pick up a build made after the first trigger, trigger again once it has finished.
+
+## battlesvr caveat
+
+Colyseus rooms live inside the battlesvr worker. When the old worker stops, every battle in progress on it is disconnected (clients see close code 1006). Hot-update battlesvr only when no battle is running, or restart it in a maintenance window.
 
 ## When to use
 

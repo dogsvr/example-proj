@@ -85,14 +85,14 @@ dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {
     let lockRes = await lock.lock();
     if (!lockRes) {
         log.warn({ lockKey }, "lock failed");
-        return;
+        throw new dogsvr.HandlerError(1006, 'role lock failed');
     }
 
     const collection = timedColl('role_coll');
     const findResult = await collection.find({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, { projection: { _id: 0 } }).toArray();
     if (findResult.length == 0) {
         log.error({ openId: reqMsg.head.openId, zoneId: reqMsg.head.zoneId }, "role not exist");
-        return;
+        throw new dogsvr.HandlerError(1004, `role not found: openId=${reqMsg.head.openId} zoneId=${reqMsg.head.zoneId}`);
     }
 
     const role = findResult[0];
