@@ -8,7 +8,9 @@ import {
     getTxnPendingCount,
     getWorkerPendingCounts,
     getMsgChannelStats,
+    DogsvrErrCode,
     type MetricSink,
+    type ErrCode,
 } from '@dogsvr/dogsvr/main_thread';
 import type { MetricsConfigExt } from './config';
 import { DURATION_BUCKETS_MS } from './defaults';
@@ -19,7 +21,7 @@ const METRIC_NAMES = {
     txnTimeoutTotal:        'dogsvr_txn_timeout_total',
     workerPending:          'dogsvr_worker_pending',
     msgChannelSabHits:      'dogsvr_msg_channel_sab_hits_total',
-    msgChannelFallback:     'dogsvr_msg_channel_fallback_total',
+    msgChannelSabFull:      'dogsvr_msg_channel_sab_full_total',
     threadCpuTime:          'dogsvr_thread_cpu_time_seconds_total',
     threadCpuWait:          'dogsvr_thread_cpu_wait_seconds_total',
     threadCpuUtilization:   'dogsvr_thread_cpu_utilization',
@@ -134,17 +136,17 @@ function registerMsgChannelMetrics(input: MainMetricsInit): void {
     const sabHits = meter.createObservableCounter(METRIC_NAMES.msgChannelSabHits, {
         description: 'Main→worker Msg frames written to SAB ring buffer.',
     });
-    const fallback = meter.createObservableCounter(METRIC_NAMES.msgChannelFallback, {
-        description: 'Main→worker Msg frames that fell back to postMessage (SAB full or disabled).',
+    const sabFull = meter.createObservableCounter(METRIC_NAMES.msgChannelSabFull, {
+        description: 'Main→worker Msg frames the SAB ring had no room for; sent via postMessage or dropped per msgChannel.fallbackOnFull.',
     });
 
     meter.addBatchObservableCallback((observer) => {
         for (const s of getMsgChannelStats()) {
             const attrs = { svr, worker_index: s.workerIndex, side: 'main' };
             observer.observe(sabHits, s.sabHits, attrs);
-            observer.observe(fallback, s.fallbackHits, attrs);
+            observer.observe(sabFull, s.sabFullHits, attrs);
         }
-    }, [sabHits, fallback]);
+    }, [sabHits, sabFull]);
 }
 
 function registerThreadStatsMetrics(input: MainMetricsInit): void {
@@ -221,16 +223,17 @@ function createMetricSink(input: MainMetricsInit): MetricSink {
             if (sampleRate < 1.0 && Math.random() >= sampleRate) return;
             inFlight.set(txnId, { cmdId, startNs: process.hrtime.bigint() });
         },
-        onCmdEnd(txnId: number, ok: boolean): void {
+        onCmdEnd(txnId: number, errCode: ErrCode): void {
             const ctx = inFlight.get(txnId);
+            inFlight.delete(txnId);
+            // Timeouts stay out of the histogram: their duration is just the txn timeout.
+            if (errCode === DogsvrErrCode.TXN_TIMEOUT) {
+                txnTimeoutTotal.add(1, { svr });
+                return;
+            }
             if (!ctx) return;
-            inFlight.delete(txnId);
             const ms = Number(process.hrtime.bigint() - ctx.startNs) / 1e6;
-            cmdDuration.record(ms, { svr, cmdId: String(ctx.cmdId), ok: ok ? '1' : '0' });
-        },
-        onTxnTimeout(txnId: number): void {
-            inFlight.delete(txnId);
-            txnTimeoutTotal.add(1, { svr });
+            cmdDuration.record(ms, { svr, cmdId: String(ctx.cmdId), err_code: String(errCode) });
         },
     };
 }

@@ -134,12 +134,12 @@ export class LockstepSyncBattleRoom extends Room {
 
     if (auth) {
       const scoreChange = this.finalKills.get(sid) ?? 0;
-      dogsvr.callCmdByClc("zonesvr", {
+      dogsvr.notifyByClc("zonesvr", {
         cmdId: cmdId.ZONE_BATTLE_END_NTF,
         openId: auth.openId,
         zoneId: auth.zoneId,
         gid: auth.gid,
-      }, JSON.stringify({ scoreChange }), true);
+      }, JSON.stringify({ scoreChange }));
     }
 
     this.addAction({ vkey: 'leave', playerId: sid, args: [sid] });

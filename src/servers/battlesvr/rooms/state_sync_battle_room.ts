@@ -344,12 +344,12 @@ export class StateSyncBattleRoom extends Room<{ state: RoomState }> {
 
     const scoreChange = player.kills;
 
-    dogsvr.callCmdByClc("zonesvr", {
+    dogsvr.notifyByClc("zonesvr", {
       cmdId: cmdId.ZONE_BATTLE_END_NTF,
       openId: player.openId,
       zoneId: player.zoneId,
       gid: player.gid,
-    }, JSON.stringify({ scoreChange }), true);
+    }, JSON.stringify({ scoreChange }));
 
     if (player.body) {
       Matter.Composite.remove(this.engine.world, player.body);

@@ -25,7 +25,7 @@ dogsvr.regCmdHandler(cmdId.ZONE_LOGIN, async (reqMsg) => {
     let lockRes = await lock.lock();
     if (!lockRes) {
         log.warn({ lockKey }, "lock failed");
-        return;   // silent drop
+        throw new dogsvr.HandlerError(1006, 'role lock failed');
     }
 
     try {
@@ -59,18 +59,12 @@ dogsvr.regCmdHandler(cmdId.ZONE_START_BATTLE, async (reqMsg) => {
     const req: cmdProto.ZoneStartBattleReq = JSON.parse(reqMsg.body as string);
     log.debug({ req }, "ZONE_START_BATTLE req");
 
-    let battleRes = await dogsvr.callCmdByClc("battlesvr", {
+    return await dogsvr.callCmdByClc("battlesvr", {
         cmdId: cmdId.BATTLE_START_BATTLE,
         openId: reqMsg.head.openId,
         zoneId: reqMsg.head.zoneId,
         gid: reqMsg.head.gid
     }, JSON.stringify({ syncType: req.syncType }));
-
-    if (battleRes == null) {
-        log.warn({ head: reqMsg.head }, "call battlesvr timeout");
-        throw new dogsvr.HandlerError(1002, 'call battlesvr timeout');
-    }
-    return battleRes as string;
 })
 
 dogsvr.regCmdHandler(cmdId.ZONE_BATTLE_END_NTF, async (reqMsg) => {

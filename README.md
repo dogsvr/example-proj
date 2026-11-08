@@ -6,7 +6,7 @@ A runnable three-server reference built on [`@dogsvr/dogsvr`](https://github.com
 
 - **Multi-server topology** with pluggable connection layers ([`cl-tsrpc`](https://github.com/dogsvr/cl-tsrpc) + [`cl-grpc`](https://github.com/dogsvr/cl-grpc)) co-existing in one process
 - **Main thread + worker threads** per server, with hot-update of worker logic via pm2
-- **Server-to-server calls** via gRPC (`callCmdByClc`) — zonesvr ↔ battlesvr
+- **Server-to-server calls** via gRPC (`callCmdByClc` / `notifyByClc`) — zonesvr ↔ battlesvr
 - **Client push** via tsrpc WebSocket (`pushMsgByCl`)
 - **Persistence**: MongoDB for player profiles + Redis for sessions, distributed locks, and ranking
 - **Real-time rooms** via Colyseus — both state-sync and lockstep variants
@@ -79,7 +79,7 @@ One architecture for production environment:
 ## More
 
 - [`docs/how-to/`](docs/how-to/) — task-oriented recipes ([hot-update workers](docs/how-to/hot_update.md), [local dev with `npm link`](docs/how-to/local_dev_with_linkdog.md))
-- [`docs/reference/`](docs/reference/) — internal structure and config schema ([server structure](docs/reference/server_structure.md))
+- [`docs/reference/`](docs/reference/) — internal structure and config schema ([server structure](docs/reference/server_structure.md), [error codes](docs/reference/error_codes.md))
 - [`docs/explanation/`](docs/explanation/) — design rationale and domain knowledge ([polyrepo layout](docs/explanation/polyrepo_layout.md), [multiplayer netcode](docs/explanation/multiplayer_netcode.md), [logger `Level` placement ADR](docs/explanation/logger_level_type_design.md), [observability caveats](docs/explanation/observability_caveats.md))
 
 Related repos in the dogsvr ecosystem:

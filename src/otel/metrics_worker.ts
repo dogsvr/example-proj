@@ -7,7 +7,7 @@ import { metrics, type Counter, type Histogram, type UpDownCounter } from '@open
 import { MeterProvider, AggregationType, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import type { WorkerMetricSink } from '@dogsvr/dogsvr/worker_thread';
+import type { WorkerMetricSink, ErrCode } from '@dogsvr/dogsvr/worker_thread';
 import { getWorkerMsgChannelStats } from '@dogsvr/dogsvr/worker_thread';
 import type { WorkerMetricsCfg } from './config';
 import { DURATION_BUCKETS_MS, TICK_BUCKETS_MS } from './defaults';
@@ -115,16 +115,16 @@ function registerMsgChannelStats(input: WorkerMetricsInit): void {
     const sabHits = meter.createObservableCounter('dogsvr_msg_channel_sab_hits_total', {
         description: 'Worker→main Msg frames written to SAB ring buffer.',
     });
-    const fallback = meter.createObservableCounter('dogsvr_msg_channel_fallback_total', {
-        description: 'Worker→main Msg frames that fell back to postMessage.',
+    const sabFull = meter.createObservableCounter('dogsvr_msg_channel_sab_full_total', {
+        description: 'Worker→main Msg frames the SAB ring had no room for; sent via postMessage or dropped per msgChannel.fallbackOnFull.',
     });
 
     meter.addBatchObservableCallback((observer) => {
         const s = getWorkerMsgChannelStats();
         if (!s) return;
         observer.observe(sabHits, s.sabHits, attrs);
-        observer.observe(fallback, s.fallbackHits, attrs);
-    }, [sabHits, fallback]);
+        observer.observe(sabFull, s.sabFullHits, attrs);
+    }, [sabHits, sabFull]);
 }
 
 function sampled(rate: number | undefined): boolean {
@@ -337,7 +337,7 @@ export function createWorkerMetricSink(): WorkerMetricSink {
             cmdHdlPending++;
             cmdHdlInFlight.set(txnId, process.hrtime.bigint());
         },
-        onCmdHdlEnd(txnId: number, cmdId: number, ok: boolean): void {
+        onCmdHdlEnd(txnId: number, cmdId: number, errCode: ErrCode): void {
             if (!cmdHdlDuration) return;
             cmdHdlPending = Math.max(0, cmdHdlPending - 1);
             const startNs = cmdHdlInFlight.get(txnId);
@@ -347,7 +347,7 @@ export function createWorkerMetricSink(): WorkerMetricSink {
             cmdHdlDuration.record(ms, {
                 ...cmdHdlLabelBase,
                 cmd_id: String(cmdId),
-                ok: ok ? '1' : '0',
+                err_code: String(errCode),
             });
         },
     };
